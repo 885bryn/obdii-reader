@@ -4,3 +4,5 @@ __pycache__/
 *.sqlite
 *.db
 *.csv
+/captures/
+/recordings/

@@ -23,4 +23,4 @@ HSFZ framing and discovery are based on public Scapy and community `rawenet` pro
 
 ## Project notes
 
-See [architecture](docs/architecture.md), [research](docs/research.md), [safety](docs/safety.md), [signals](docs/signals.md), and [roadmap](docs/roadmap.md). Run offline checks with `python -m unittest discover -s tests`.
+Before moving to the laptop or connecting the vehicle, follow the [initial testing handoff](docs/testing-handoff.md). See [architecture](docs/architecture.md), [research](docs/research.md), [safety](docs/safety.md), [signals](docs/signals.md), and [roadmap](docs/roadmap.md). Run offline checks with `python -m unittest discover -s tests`.

@@ -1,0 +1,12 @@
+{
+  "name": "simulated-demo",
+  "validation_status": "demo",
+  "transport": "mock",
+  "signals": [
+    {"id":"engine_rpm","name":"Engine RPM","unit":"rpm","kind":"measured","provenance":"Synthetic demo waveform; not vehicle data","confidence":"simulated","verification":"demo","enabled":true,"expected_hz":2},
+    {"id":"vehicle_speed","name":"Vehicle speed","unit":"km/h","kind":"measured","provenance":"Synthetic demo waveform; not vehicle data","confidence":"simulated","verification":"demo","enabled":true,"expected_hz":2},
+    {"id":"coolant_temp","name":"Coolant temperature","unit":"°C","kind":"measured","provenance":"Synthetic constant; not vehicle data","confidence":"simulated","verification":"demo","enabled":true,"expected_hz":2},
+    {"id":"boost","name":"Boost","unit":"bar","kind":"derived","provenance":"Synthetic demo formula","confidence":"simulated","verification":"demo","enabled":true,"expected_hz":2},
+    {"id":"gear","name":"Gear","unit":"","kind":"unavailable","provenance":"No source configured","confidence":"none","verification":"unavailable","enabled":false}
+  ]
+}

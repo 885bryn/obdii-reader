@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "supra-telemetry"
+version = "0.1.0"
+description = "Read-only ENET telemetry prototype for the 2023 Toyota GR Supra"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.setuptools]
+packages = ["supra_telemetry"]

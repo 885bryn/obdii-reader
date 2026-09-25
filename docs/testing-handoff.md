@@ -44,7 +44,7 @@ The SQLite and CSV files are ignored by Git.
 5. Close ISTA, BimmerLink, coding tools, and anything else that could use the diagnostic connection.
 6. Stop immediately if the vehicle shows an unexpected warning or changes state.
 
-Follow Toyota service information for the correct ignition/PAD state for the exact market and model year. The project must not guess or automate that state.
+The initial bounded discovery succeeded with the engine off and did not require PAD/Diagnostics Mode. Do not infer from that result that a later diagnostic session uses the same state. Toyota bulletin T-SB-0062-22 documents three Start-Stop presses within 0.8 seconds to enter PAD/Diagnostics Mode for its specific 2023 Supra ISTA service procedure, together with a supported battery charger and voltage limits. Follow the exact applicable Toyota service procedure rather than generalizing that sequence or letting this project automate vehicle state.
 
 ## 4. Find the laptop's ENET address
 
@@ -64,10 +64,26 @@ Create a private capture directory and substitute the laptop adapter's real addr
 
 ```powershell
 New-Item -ItemType Directory -Force captures
-python -m supra_telemetry discover --interface 169.254.x.x --json captures/discovery.json
+python -m supra_telemetry discover --interface 169.254.x.x --json captures/discovery.json --redact-console
 ```
 
-This sends bounded HSFZ and DoIP vehicle-identification discovery. It does not send an ECU diagnostic request or establish a diagnostic session.
+This sends bounded HSFZ and DoIP vehicle-identification discovery. It does not send an ECU diagnostic request or establish a diagnostic session. The complete capture remains in the private file while the console shows a redacted copy that is safer to share.
+
+Optional gateway identity check:
+
+```powershell
+python -m supra_telemetry verify-gateway --capture captures/discovery.json
+```
+
+This validates one HSFZ response in the capture and binds the connection to its exact IPv4 link-local interface address; it uses only that interface, the captured peer, and parsed diagnostic address. If the captured interface address is no longer assigned, setup fails before a diagnostic request is sent. It sends one read-only UDS VIN request (22 F190) to TCP 6801, using tester address F4. The F4 convention is corroborated by community protocol evidence, not published by Toyota for this Supra. The tool prints only a small pass/fail result, stores no exchange, and fails on errors or any VIN mismatch. Success verifies gateway HSFZ identity routing only; it says nothing about the DME address or oil/coolant temperature and other signal/PID support. It does not scan, retry, start a diagnostic session, or send tester-present. Use a stable adapter and follow the stationary vehicle and battery-support guidance above.
+
+After gateway identity routing has been verified, the optional DME identity check is:
+
+```powershell
+python -m supra_telemetry verify-dme --capture captures/discovery.json
+```
+
+It binds to the capture's exact local IPv4 link-local address and sends exactly one UDS VIN request (22 F190) to candidate DME target 0x12 at the captured peer on TCP 6801, using tester address F4. Target 0x12 and tester F4 are community-corroborated conventions; Toyota has not published them for this vehicle. It prints only pass/fail, saves no exchange, and fails on errors or any VIN mismatch. Success verifies only DME identity routing. It does not establish supported PIDs or coolant/oil temperature availability. It does not scan, retry, start a diagnostic session, send tester-present, or read live signals.
 
 The capture may contain the VIN, MAC, EID, GID, IP address, or other vehicle identifiers. `captures/` is ignored by Git. Do not commit, publish, paste publicly, or attach an unredacted capture.
 
@@ -83,6 +99,10 @@ Expected outcomes:
 - A DoIP announcement identifies a candidate DoIP gateway, but live DoIP routing is not implemented.
 - No response is also useful evidence; inspect link state and vehicle preparation rather than scanning or guessing.
 
+### Initial observed checkpoint
+
+On 2026-09-24, a stationary, engine-off 2023 GR Supra returned one valid HSFZ identification response over an IPv4 link-local ENET connection. The same bounded attempt returned no DoIP announcement. A later connection-only check confirmed that the discovered peer accepts TCP connections on port 6801; it sent no application payload. The user subsequently reported that the separately reviewed `verify-gateway` command succeeded, confirming one gateway VIN identity route. Unique vehicle and network identifiers remain in the ignored local capture and must not be copied into tracked documentation. This checkpoint does not verify the DME route, any temperature PID, or the live polling gate below.
+
 ## 7. Live polling gate
 
 Do not run `python -m supra_telemetry run` with the supplied template. It is intentionally unverified and contains no enabled vehicle signals or ECU target addresses.
@@ -94,6 +114,7 @@ Live polling can begin only after all of the following are documented:
 - one read-only request with known response length, formula, and units;
 - independent plausibility checks for the returned value;
 - a conservative initial request interval;
+- a battery-support plan appropriate to the documented vehicle state and expected session duration;
 - a rollback/stop procedure for unexpected responses or vehicle warnings.
 
 The application then enforces one request at a time and halts the entire live acquisition after its first transport, protocol, negative-response, decoder, or recording error.

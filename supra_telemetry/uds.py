@@ -10,6 +10,7 @@ MODE01_CODECS = {
     0x0C: {"unit": "rpm", "response_offset": 2, "width": 2, "byteorder": "big", "signed": False, "scale": 0.25, "offset": 0.0},
     0x0D: {"unit": "km/h", "response_offset": 2, "width": 1, "byteorder": "big", "signed": False, "scale": 1.0, "offset": 0.0},
     0x05: {"unit": "°C", "response_offset": 2, "width": 1, "byteorder": "big", "signed": False, "scale": 1.0, "offset": -40.0},
+    0x5C: {"unit": "°C", "response_offset": 2, "width": 1, "byteorder": "big", "signed": False, "scale": 1.0, "offset": -40.0},
     0x0F: {"unit": "°C", "response_offset": 2, "width": 1, "byteorder": "big", "signed": False, "scale": 1.0, "offset": -40.0},
     0x11: {"unit": "%", "response_offset": 2, "width": 1, "byteorder": "big", "signed": False, "scale": 100.0 / 255.0, "offset": 0.0},
 }
@@ -42,6 +43,8 @@ def mode01_value(pid: int, data: bytes) -> tuple[float, str]:
     if pid == 0x0D and len(data) == 1:
         return (float(data[0]), "km/h")
     if pid == 0x05 and len(data) == 1:
+        return (float(data[0]) - 40.0, "°C")
+    if pid == 0x5C and len(data) == 1:
         return (float(data[0]) - 40.0, "°C")
     if pid == 0x0F and len(data) == 1:
         return (float(data[0]) - 40.0, "°C")

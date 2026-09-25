@@ -1,5 +1,7 @@
 import csv
 import copy
+import contextlib
+import io
 import json
 import os
 import socket
@@ -22,9 +24,43 @@ from supra_telemetry.storage import TelemetryStore, export_csv
 from supra_telemetry.engine import AcquisitionEngine
 from supra_telemetry.live import HsfzSignalSource
 from supra_telemetry.web import serve
+from supra_telemetry import __main__ as cli
+from supra_telemetry.gateway_check import load_gateway_capture, verify_gateway
+from supra_telemetry.dme_check import DME_TARGET_ADDRESS, verify_dme
 
 
 class CoreTests(unittest.TestCase):
+    def test_discover_redacts_console_but_preserves_full_json_capture(self):
+        hsfz = [{"peer": "198.51.100.20", "port": 6811,
+                 "identification": {"vin": "TESTVIN0000000001", "mac": "001122334455"},
+                 "raw_hex": "deadbeef"}]
+        doip_results = [{"peer": "203.0.113.30", "payload_type": 4,
+                         "announcement": {"vin": "DOIPVIN0000000001", "logical_address": "1234",
+                                          "eid": "aabbccddeeff", "gid": "112233445566",
+                                          "further_action": 0, "sync_status": 1},
+                         "raw_hex": "cafebabe"}]
+        with tempfile.TemporaryDirectory() as td:
+            capture = Path(td) / "discovery.json"
+            stdout = io.StringIO()
+            with patch.object(cli, "discover_hsfz", return_value=hsfz), \
+                 patch.object(cli, "discover_doip", return_value=doip_results), \
+                 contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["discover", "--interface", "192.0.2.10", "--redact-console", "--json", str(capture)]), 0)
+
+            printed = stdout.getvalue()
+            for sensitive in ("192.0.2.10", "198.51.100.20", "203.0.113.30", "TESTVIN0000000001",
+                              "001122334455", "DOIPVIN0000000001", "1234", "aabbccddeeff",
+                              "112233445566", "deadbeef", "cafebabe"):
+                self.assertNotIn(sensitive, printed)
+            summary = json.loads(printed)
+            self.assertEqual((summary["hsfz_count"], summary["doip_count"]), (1, 1))
+            self.assertEqual(summary["hsfz"][0]["port"], 6811)
+            self.assertEqual(summary["doip"][0]["payload_type"], 4)
+            self.assertEqual(summary["doip"][0]["announcement"]["further_action"], 0)
+            self.assertEqual(json.loads(capture.read_text(encoding="utf-8")), {
+                "interface": "192.0.2.10", "hsfz": hsfz, "doip": doip_results,
+                "doip_note": "A vehicle announcement indicates DoIP detected; live DoIP routing activation is not implemented."})
+
     def test_policy_allow_reject_and_correlation(self):
         p = SafetyPolicy()
         for msg in (b"\x01\x0c", b"\x09\x02", b"\x22\xf1\x90"):
@@ -41,6 +77,9 @@ class CoreTests(unittest.TestCase):
         self.assertTrue(parse_response(b"\x7f\x22\x78", 0x22).pending)
         self.assertEqual(mode01_value(0x0c, b"\x1a\x2c"), (1675.0, "rpm"))
         self.assertEqual(mode01_value(0x05, b"\x64"), (60.0, "°C"))
+        self.assertEqual(mode01_value(0x5c, b"\x64"), (60.0, "°C"))
+        with self.assertRaises(ValueError): mode01_value(0x5c, b"")
+        with self.assertRaises(ValueError): mode01_value(0x5c, b"\x64\x00")
 
     def test_transport_frames(self):
         packet = encode_frame(0x0001, 0xF4, 0x10, b"\x01\x0c")
@@ -70,6 +109,10 @@ class CoreTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         _, sigs = load_profile(root / "config/supra-2023.template.json")
         self.assertFalse(any(s.enabled for s in sigs))
+        by_id = {s.id: s for s in sigs}
+        self.assertEqual((by_id["coolant_temp"].request, by_id["coolant_temp"].unit), ("05", "°C"))
+        self.assertEqual((by_id["oil_temp"].request, by_id["oil_temp"].unit, by_id["oil_temp"].enabled), ("5C", "°C", False))
+        self.assertEqual(by_id["oil_temp"].verification, "unverified")
         with self.assertRaises(ValueError): load_profile(root / "config/supra-2023.template.json", live=True)
         s = SignalDefinition("x", "x", response_offset=1, width=2, scale=.25)
         self.assertEqual(decode_integer(b"\x00\x01\x90", s), 100.0)
@@ -104,6 +147,23 @@ class CoreTests(unittest.TestCase):
             unsupported = json.loads(json.dumps(base)); unsupported["signals"][0]["request"] = "10"
             path.write_text(json.dumps(unsupported), encoding="utf-8")
             with self.assertRaises(ValueError): load_profile(path, live=True)
+
+    def test_engine_oil_temperature_pid_canonical_profile_metadata(self):
+        profile = {"validation_status":"verified", "transport":"HSFZ", "tester_address":244,
+                   "signals":[{"id":"oil_temp", "name":"Engine oil temperature", "kind":"measured",
+                               "verification":"verified", "enabled":True, "service":"01",
+                               "request":"5C", "target_address":16}]}
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "profile.json"
+            path.write_text(json.dumps(profile), encoding="utf-8")
+            signal = load_profile(path, live=True)[1][0]
+            self.assertEqual((signal.unit, signal.response_offset, signal.width, signal.scale, signal.offset),
+                             ("°C", 2, 1, 1.0, -40.0))
+            for field, value in (("unit", "F"), ("response_offset", 3), ("width", 2),
+                                 ("scale", 2), ("offset", 0), ("signed", True), ("byteorder", "little")):
+                bad = json.loads(json.dumps(profile)); bad["signals"][0][field] = value
+                path.write_text(json.dumps(bad), encoding="utf-8")
+                with self.subTest(field=field), self.assertRaises(ValueError): load_profile(path, live=True)
 
     def test_profile_strict_preflight(self):
         base = {"validation_status":"verified", "transport":"HSFZ", "tester_address":244,
@@ -224,7 +284,11 @@ class CoreTests(unittest.TestCase):
         parsed = parse_discovery_response(packet)
         self.assertEqual(parsed["vin"], "WBA12345678901234")
         self.assertEqual(parsed["mac"], "AABBCCDDEEFF")
+        self.assertEqual(parsed["diagnostic_address"], 0x10)
         with self.assertRaises(ValueError): parse_discovery_response(packet[:-1])
+        for malformed in (b"DIAGADRZZ" + body[len(b"DIAGADR10"):], b"BMWMACAABBCCDDEEFFBMWVINWBA12345678901234"):
+            bad_packet = struct.pack(">IH", len(malformed), 0x11) + malformed
+            with self.assertRaises(ValueError): parse_discovery_response(bad_packet)
         profile = {"validation_status": "verified", "tester_address": 0xF4}
         sig = SignalDefinition("rpm", "RPM", "rpm", verification="verified", enabled=True, service="01", request="0C", target_address=0x10, response_offset=2, width=2)
         class FakeClient:
@@ -238,6 +302,170 @@ class CoreTests(unittest.TestCase):
             def request(self, req): raise TimeoutError("fixture timeout")
         bad = HsfzSignalSource("127.0.0.1", profile, [sig], client_factory=Broken).read()[0]
         self.assertEqual((bad.value, bad.quality), (None, "error"))
+
+    def test_gateway_identity_check_is_single_bounded_and_redacted(self):
+        vin, mac = "TESTVIN0000000001", "001122334455"
+        body = b"DIAGADR10BMWMAC" + mac.encode() + b"BMWVIN" + vin.encode()
+        packet = struct.pack(">IH", len(body), 0x11) + body
+        record = {"peer": "169.254.10.20", "port": 6811,
+                  "identification": {"vin": vin, "mac": mac}, "raw_hex": packet.hex()}
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "capture.json"
+            path.write_text(json.dumps({"interface": "169.254.10.30", "hsfz": [record]}), encoding="utf-8")
+            # Older captures omit the parsed address; new captures must agree
+            # with the raw DIAGADR field (0x10 in this synthetic packet).
+            self.assertEqual(load_gateway_capture(path)[2], 0x10)
+            for captured_address in (0x10,):
+                addressed = {**record, "identification": {**record["identification"],
+                                                            "diagnostic_address": captured_address}}
+                path.write_text(json.dumps({"interface": "169.254.10.30", "hsfz": [addressed]}), encoding="utf-8")
+                self.assertEqual(load_gateway_capture(path)[2], 0x10)
+            for captured_address in (0x11, "16", True, -1, 256, None):
+                addressed = {**record, "identification": {**record["identification"],
+                                                            "diagnostic_address": captured_address}}
+                path.write_text(json.dumps({"interface": "169.254.10.30", "hsfz": [addressed]}), encoding="utf-8")
+                with self.subTest(diagnostic_address=captured_address), self.assertRaises(ValueError):
+                    load_gateway_capture(path)
+            path.write_text(json.dumps({"interface": "169.254.10.30", "hsfz": [record]}), encoding="utf-8")
+            left, right = socket.socketpair(); seen = []
+            def gateway():
+                frame = recv_frame(right); seen.append(frame)
+                right.sendall(encode_frame(1, 0x10, 0xF4, b"\x62\xf1\x90" + vin.encode()))
+            thread = threading.Thread(target=gateway); thread.start()
+            created = []
+            def factory(address, timeout, *, source_address):
+                created.append((address, timeout, source_address)); return left
+            self.assertEqual(verify_gateway(path, connector_factory=factory),
+                             {"result": "verified", "check": "HSFZ gateway identity routing"})
+            thread.join(1); right.close()
+            self.assertEqual(created, [(('169.254.10.20', 6801), 2.0, ('169.254.10.30', 0))])
+            self.assertEqual(len(seen), 1)
+            self.assertEqual((seen[0].source, seen[0].target, seen[0].payload), (0xF4, 0x10, b"\x22\xf1\x90"))
+            self.assertEqual(left.fileno(), -1)
+
+            # Crafted non-link-local captures must fail before a client is constructed.
+            bad = {"interface": "192.0.2.2", "hsfz": [record]}
+            path.write_text(json.dumps(bad), encoding="utf-8")
+            def forbidden(*_a, **_kw): raise AssertionError("client must not be constructed")
+            with self.assertRaises(ValueError): verify_gateway(path, client_factory=forbidden)
+            bad = {"interface": "169.254.1.1", "hsfz": [{**record, "peer": "192.0.2.1"}]}
+            path.write_text(json.dumps(bad), encoding="utf-8")
+            with self.assertRaises(ValueError): verify_gateway(path, client_factory=forbidden)
+
+            for invalid_records in ([], [record, record], [{**record, "port": 1234}],
+                                    [{**record, "identification": {"vin": "OTHER", "mac": mac}}],
+                                    [{**record, "raw_hex": "nothex"}]):
+                path.write_text(json.dumps({"interface": "169.254.1.1", "hsfz": invalid_records}), encoding="utf-8")
+                with self.subTest(records=invalid_records), self.assertRaises(ValueError): load_gateway_capture(path)
+
+            for uds_response in (b"\x62\xf1\x90" + b"Z" * 17, b"\x7f\x22\x31", b"\x7f\x22\x78"):
+                path.write_text(json.dumps({"interface": "169.254.1.1", "hsfz": [record]}), encoding="utf-8")
+                left, right = socket.socketpair()
+                def rejected_gateway(sock=right, response=uds_response):
+                    recv_frame(sock)
+                    sock.sendall(encode_frame(1, 0x10, 0xF4, response))
+                worker = threading.Thread(target=rejected_gateway); worker.start()
+                with self.assertRaises((ConnectionError, ValueError)):
+                    verify_gateway(path, connector_factory=lambda *_a, **_kw: left)
+                worker.join(1); right.close()
+                self.assertEqual(left.fileno(), -1)
+
+            path.write_text(json.dumps({"interface": "169.254.1.1", "hsfz": [record]}), encoding="utf-8")
+            left, right = socket.socketpair()
+            def hsfz_error():
+                recv_frame(right); right.sendall(bytes.fromhex("000000000040"))
+            worker = threading.Thread(target=hsfz_error); worker.start()
+            with self.assertRaises(ConnectionError):
+                verify_gateway(path, connector_factory=lambda *_a, **_kw: left)
+            worker.join(1); right.close()
+            self.assertEqual(left.fileno(), -1)
+
+            # A stale captured source fails during bind/connect, before HSFZ request bytes.
+            path.write_text(json.dumps({"interface": "169.254.1.99", "hsfz": [record]}), encoding="utf-8")
+            opened = []
+            class BindFailSocket:
+                closed = False
+                def bind(self, source):
+                    opened.append(source)
+                    raise OSError("source address is not assigned")
+                def close(self): self.closed = True
+            failing_socket = BindFailSocket()
+            def bind_failing_connector(address, timeout, *, source_address):
+                self.assertEqual(source_address, ("169.254.1.99", 0))
+                try:
+                    failing_socket.bind(source_address)
+                except OSError:
+                    failing_socket.close()
+                    raise
+            with self.assertRaises(OSError): verify_gateway(path, connector_factory=bind_failing_connector)
+            self.assertEqual(opened, [("169.254.1.99", 0)])
+            self.assertTrue(failing_socket.closed)
+
+            path.write_text(json.dumps({"interface": "169.254.1.1", "hsfz": [record]}), encoding="utf-8")
+            stdout = io.StringIO()
+            with patch.object(cli, "verify_gateway", side_effect=TimeoutError("secret " + vin + " " + mac)), \
+                 contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["verify-gateway", "--capture", str(path)]), 1)
+            self.assertNotIn(vin, stdout.getvalue()); self.assertNotIn(mac, stdout.getvalue())
+            self.assertEqual(json.loads(stdout.getvalue())["result"], "failed")
+
+    def test_dme_identity_check_is_single_bounded_and_redacted(self):
+        vin, mac = "TESTVIN0000000001", "001122334455"
+        body = b"DIAGADR10BMWMAC" + mac.encode() + b"BMWVIN" + vin.encode()
+        packet = struct.pack(">IH", len(body), 0x11) + body
+        record = {"peer": "169.254.10.20", "port": 6811,
+                  "identification": {"vin": vin, "mac": mac}, "raw_hex": packet.hex()}
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "capture.json"
+            path.write_text(json.dumps({"interface": "169.254.10.30", "hsfz": [record]}), encoding="utf-8")
+            left, right = socket.socketpair(); seen = []
+            def ecu():
+                frame = recv_frame(right); seen.append(frame)
+                right.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4, b"\x62\xf1\x90" + vin.encode()))
+            thread = threading.Thread(target=ecu); thread.start()
+            created = []
+            def factory(address, timeout, *, source_address):
+                created.append((address, timeout, source_address)); return left
+            self.assertEqual(verify_dme(path, connector_factory=factory),
+                             {"result": "verified", "check": "HSFZ DME identity routing"})
+            thread.join(1); right.close()
+            self.assertEqual(created, [(('169.254.10.20', 6801), 2.0, ('169.254.10.30', 0))])
+            self.assertEqual(len(seen), 1)
+            self.assertEqual((seen[0].source, seen[0].target, seen[0].payload),
+                             (0xF4, 0x12, b"\x22\xf1\x90"))
+            self.assertEqual(DME_TARGET_ADDRESS, 0x12)
+            self.assertEqual(left.fileno(), -1)
+
+            # VIN mismatch, negative/pending response, and malformed payloads fail closed.
+            for response in (b"\x62\xf1\x90" + b"Z" * 17, b"\x7f\x22\x31",
+                             b"\x7f\x22\x78", b"\x62\xf1\x90" + b"X" * 16):
+                left, right = socket.socketpair()
+                def rejecting_ecu(sock=right, uds=response):
+                    recv_frame(sock)
+                    sock.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4, uds))
+                worker = threading.Thread(target=rejecting_ecu); worker.start()
+                with self.assertRaises((ConnectionError, ValueError)):
+                    verify_dme(path, connector_factory=lambda *_a, **_kw: left)
+                worker.join(1); right.close()
+                self.assertEqual(left.fileno(), -1)
+
+            # A stale captured source fails before the HSFZ request is sent.
+            path.write_text(json.dumps({"interface": "169.254.10.99", "hsfz": [record]}), encoding="utf-8")
+            bind_attempts = []
+            def bind_failure(address, timeout, *, source_address):
+                bind_attempts.append((address, source_address))
+                raise OSError("source address is not assigned")
+            with self.assertRaises(OSError): verify_dme(path, connector_factory=bind_failure)
+            self.assertEqual(bind_attempts, [(('169.254.10.20', 6801), ('169.254.10.99', 0))])
+
+            stdout = io.StringIO()
+            with patch.object(cli, "verify_dme", side_effect=TimeoutError("secret " + vin + " " + mac)), \
+                 contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["verify-dme", "--capture", str(path)]), 1)
+            self.assertNotIn(vin, stdout.getvalue()); self.assertNotIn(mac, stdout.getvalue())
+            self.assertNotIn("169.254", stdout.getvalue())
+            self.assertEqual(json.loads(stdout.getvalue()),
+                             {"result": "failed", "check": "HSFZ DME identity routing"})
 
     def test_doip_discovery_absolute_deadline(self):
         payload = b"V" * 17 + b"\x12\x34" + b"E" * 6 + b"G" * 6 + b"\x00"

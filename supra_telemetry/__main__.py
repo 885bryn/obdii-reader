@@ -8,6 +8,8 @@ from . import __version__
 from .doip import discover as discover_doip
 from .engine import AcquisitionEngine
 from .hsfz import discover as discover_hsfz
+from .gateway_check import verify_gateway
+from .dme_check import verify_dme
 from .live import HsfzSignalSource
 from .models import SignalDefinition, utc_now
 from .profiles import load_profile
@@ -67,6 +69,28 @@ def add_server_args(cmd, db_required=False):
     cmd.add_argument("--db", required=db_required); cmd.add_argument("--ui-host", default="127.0.0.1"); cmd.add_argument("--port", type=int, default=8765); cmd.add_argument("--interval", type=float, default=.5)
 
 
+def redact_discovery(results):
+    """Return a console-safe discovery summary without vehicle/network identifiers."""
+    redacted = {"interface": "<redacted>", "hsfz": [], "doip": [], "doip_note": results["doip_note"],
+                "hsfz_count": len(results["hsfz"]), "doip_count": len(results["doip"])}
+    for item in results["hsfz"]:
+        identification = item.get("identification")
+        redacted["hsfz"].append({
+            "peer": "<redacted>", "port": item.get("port"),
+            "identification": ({key: "<redacted>" for key in identification} if identification is not None else None),
+            "raw_hex": "<redacted>" if item.get("raw_hex") is not None else None,
+        })
+    for item in results["doip"]:
+        announcement = item.get("announcement")
+        redacted["doip"].append({
+            "peer": "<redacted>", "payload_type": item.get("payload_type"),
+            "announcement": ({key: (value if key in ("further_action", "sync_status") else "<redacted>")
+                              for key, value in announcement.items()} if announcement is not None else None),
+            "raw_hex": "<redacted>" if item.get("raw_hex") is not None else None,
+        })
+    return redacted
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(prog="supra-telemetry", description="Read-only GR Supra ENET telemetry prototype")
     parser.add_argument("--version", action="version", version=__version__)
@@ -75,7 +99,13 @@ def main(argv=None):
     add_server_args(demo)
     disc = sub.add_parser("discover", help="bounded HSFZ UDP and DoIP discovery; sends no diagnostics")
     disc.add_argument("--interface", required=True, help="local IPv4 address to bind")
-    disc.add_argument("--timeout", type=float, default=.6); disc.add_argument("--broadcast", default="169.254.255.255"); disc.add_argument("--json")
+    disc.add_argument("--timeout", type=float, default=.6); disc.add_argument("--broadcast", default="169.254.255.255"); disc.add_argument("--json"); disc.add_argument("--redact-console", action="store_true", help="redact vehicle and network identifiers from console JSON")
+    gateway = sub.add_parser("verify-gateway", help="one bounded, read-only identity check using a private discovery capture")
+    gateway.add_argument("--capture", required=True, help="private JSON file created by discover")
+    gateway.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    dme = sub.add_parser("verify-dme", help="one bounded, read-only DME identity check using a private discovery capture")
+    dme.add_argument("--capture", required=True, help="private JSON file created by discover")
+    dme.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     run = sub.add_parser("run", help="live HSFZ reads using a verified, address-explicit profile")
     run.add_argument("--profile", required=True); run.add_argument("--host", required=True, help="explicit discovered gateway IPv4 address"); run.add_argument("--db", required=True)
     run.add_argument("--ui-host", default="127.0.0.1"); run.add_argument("--port", type=int, default=8765); run.add_argument("--interval", type=float, default=1.0); run.add_argument("--timeout", type=float, default=2.0)
@@ -90,8 +120,24 @@ def main(argv=None):
         results = {"interface": args.interface, "hsfz": discover_hsfz(args.interface, timeout, broadcast=args.broadcast),
                    "doip": discover_doip(args.interface, timeout),
                    "doip_note": "A vehicle announcement indicates DoIP detected; live DoIP routing activation is not implemented."}
-        out = json.dumps(results, indent=2); print(out)
-        if args.json: Path(args.json).write_text(out + "\n", encoding="utf-8")
+        if args.json: Path(args.json).write_text(json.dumps(results, indent=2) + "\n", encoding="utf-8")
+        print(json.dumps(redact_discovery(results) if args.redact_console else results, indent=2))
+        return 0
+    if args.command == "verify-gateway":
+        try:
+            result = verify_gateway(args.capture, args.timeout)
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "HSFZ gateway identity routing"}))
+            return 1
+        print(json.dumps(result))
+        return 0
+    if args.command == "verify-dme":
+        try:
+            result = verify_dme(args.capture, args.timeout)
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "HSFZ DME identity routing"}))
+            return 1
+        print(json.dumps(result))
         return 0
     if not 0.1 <= args.interval <= 10:
         parser.error("interval must be between 0.1 and 10 seconds")

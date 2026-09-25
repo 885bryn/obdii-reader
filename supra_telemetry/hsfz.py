@@ -90,15 +90,21 @@ def parse_discovery_response(packet: bytes) -> dict:
     if length != len(packet) - 6 or length > MAX_BODY or control != VEHICLE_IDENT:
         raise ValueError("invalid HSFZ vehicle identification response")
     body = packet[6:]
-    if b"DIAGADR10" not in body:
+    marker = b"DIAGADR"
+    idx = body.find(marker)
+    if idx < 0 or body.find(marker, idx + len(marker)) >= 0 or idx + len(marker) + 2 > len(body):
         raise ValueError("unrecognized HSFZ identification response")
+    address_text = body[idx + len(marker):idx + len(marker) + 2]
+    if any(c not in b"0123456789abcdefABCDEF" for c in address_text):
+        raise ValueError("malformed HSFZ diagnostic address")
     def marker_value(marker: bytes, size: int):
         idx = body.find(marker)
         if idx < 0 or idx + len(marker) + size > len(body):
             return None
         raw = body[idx + len(marker):idx + len(marker) + size]
         return raw.decode("ascii", "replace")
-    return {"vin": marker_value(b"BMWVIN", 17), "mac": marker_value(b"BMWMAC", 12)}
+    return {"vin": marker_value(b"BMWVIN", 17), "mac": marker_value(b"BMWMAC", 12),
+            "diagnostic_address": int(address_text, 16)}
 
 
 def discover(local_ipv4: str, timeout: float = 0.6, *, broadcast: str = "169.254.255.255", port: int = UDP_PORT) -> list[dict]:
@@ -134,10 +140,12 @@ def discover(local_ipv4: str, timeout: float = 0.6, *, broadcast: str = "169.254
 class HsfzClient:
     """One-connection, one-in-flight read client; caller supplies all addresses."""
     def __init__(self, host: str, source: int, target: int, port: int = TCP_PORT, timeout: float = 2.0,
-                 policy: SafetyPolicy | None = None, audit=None, sock_factory=socket.create_connection):
+                 policy: SafetyPolicy | None = None, audit=None, sock_factory=socket.create_connection,
+                 fail_on_pending: bool = False):
         self.host, self.port, self.source, self.target = host, port, source, target
         self.timeout = min(10.0, max(0.1, float(timeout)))
         self.policy, self.audit, self.sock_factory = policy or SafetyPolicy(), audit, sock_factory
+        self.fail_on_pending = fail_on_pending
         self._lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._closed = False
@@ -199,6 +207,8 @@ class HsfzClient:
                     if not self.policy.correlate(payload, response):
                         raise ConnectionError("UDS response does not correlate with request")
                     if response[:1] == b"\x7f" and len(response) >= 3 and response[2] == 0x78:
+                        if self.fail_on_pending:
+                            raise ConnectionError("pending UDS response is not accepted")
                         continue
                     outcome = "ok"
                     return response

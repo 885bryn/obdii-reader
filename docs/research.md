@@ -6,24 +6,36 @@
 - DoIP discovery framing follows ISO 13400's generic header structure; DoIP discovery does not establish a diagnostic route.
 - HSFZ framing/control words and UDP 6811 identification request are implemented from community protocol research; packet fixtures test the software's encoding/parsing. These are not Toyota/OEM specifications and do not validate behavior on a Supra.
 - DoIP discovery announcement parsing accepts protocol versions 0x02/0x03 with matching inverse byte, validates the ISO 13400 field structure/payload length, and uses one absolute deadline. It does not establish a diagnostic route.
-- The repository has not connected to or tested a 2023 GR Supra. Discovery announcements remain candidate evidence only.
+
+## Verified by vehicle testing
+
+- On 2026-09-24, with a stationary 2023 GR Supra, engine off, the USB Ethernet adapter established an IPv4 link-local connection and the application received one syntactically valid HSFZ vehicle-identification response to its bounded UDP 6811 request.
+- The response contained the expected HSFZ identification marker and vehicle-specific identity fields. The peer address, VIN, MAC, and raw datagram remain only in the ignored local capture and are intentionally excluded from tracked documentation.
+- The same bounded discovery attempt received no DoIP vehicle announcement. This records that attempt's result; it does not prove that the vehicle never supports DoIP in other states or configurations.
+- A subsequent connection-only check to the discovered peer's conventional HSFZ TCP port 6801 succeeded and then closed without sending an application payload. This verifies TCP reachability only.
+- The initial discovery and connection-only checks sent no ECU diagnostic request. The user later reported that the separately reviewed, single-request `verify-gateway` VIN identity check succeeded. This verifies gateway identity routing only; it does not verify a DME target, supported PID/DID, decoder, value, or polling rate.
 
 ## Inferred
 
-- The A90/A91 Supra uses BMW-derived electronics, and an ENET-style Ethernet diagnostic route is plausible. Exact ECU topology, selected diagnostic protocol, gateway behavior, and supported data remain vehicle/version dependent.
+- The observed HSFZ identification response confirms an ENET/HSFZ discovery path on the tested vehicle. It does not establish that the responding peer accepts the application's TCP diagnostic framing or reveal ECU topology, target addresses, session needs, or supported data.
 - Standard SAE PIDs are worth trying only after connection and ECU support are confirmed.
 
 ## Unknown / empirical
 
-- Whether the supplied adapter presents Ethernet to the host, link configuration, vehicle-side gateway address, Supra-specific HSFZ route semantics, session needs, module addresses, supported PIDs/DIDs, polling limits, and keep-alive requirements.
+- Whether candidate DME target 0x12 routes on this Supra, and the vehicle's DME session needs, supported PIDs/DIDs, polling limits, and keep-alive requirements. The user-reported gateway VIN success does not answer those DME-specific questions.
 - Actual update rate and any transmission/chassis-specific data exposure.
-- No real 2023 Supra has been tested here.
 
 ## References
 
-- **Primary / manufacturer and standards context:** Toyota 2023 Supra PDS bulletin T-SB-0062-22 (diagnostic cable/software requirements; not telemetry/protocol details): https://static.nhtsa.gov/odi/tsbs/2022/MC-10217797-9999.pdf
+- **Primary / manufacturer and standards context:** Toyota 2023 Supra PDS bulletin T-SB-0062-22 (Supra diagnostic cable and ISTA requirements; for its documented service procedure it specifies a supported battery charger and three Start-Stop presses within 0.8 seconds for PAD/Diagnostics Mode; it does not publish raw HSFZ tester/ECU addresses, telemetry requests, or signal support): https://static.nhtsa.gov/odi/tsbs/2022/MC-10217797-9999.pdf
 - **Primary / standards body:** ISO 13400 overview: https://www.iso.org/standard/74751.html
 - **Community implementation evidence:** rawenet HSFZ protocol notes and reported capture-derived format/discovery markers: https://github.com/rawmind0/rawenet/blob/master/docs/hsfz-protocol.md
+- **Community implementation evidence:** klartext's BMW HSFZ tooling uses target 0x12 for DME access and reports testing on other BMW platforms, not this Supra: https://github.com/HadiCherkaoui/klartext
+- **Independent community address mapping:** obd-gauge-cluster records BMW DME diagnostic address 0x12 from its cited implementation and vehicle evidence; this is not Toyota documentation or proof for this Supra: https://github.com/cheeseprince/obd-gauge-cluster/blob/main/docs/BMW-STATUS.md
+
+The optional `verify-gateway` check binds its TCP socket to the exact local IPv4 address in the capture, uses tester address 0xF4 (a community-corroborated convention rather than Toyota-published Supra routing data), and sends one UDS VIN read (22 F190) to the single link-local peer and diagnostic address parsed from the user's private discovery capture. It requires an exact VIN match; a stale/unassigned local source causes connection setup to fail before request bytes are sent. This can confirm gateway HSFZ identity routing only. It does not reveal or verify the DME target address or any signal/PID support, including oil or coolant temperature.
+
+The optional `verify-dme` check makes a distinct single VIN read through candidate target 0x12 with tester 0xF4, using the captured HSFZ peer and exact captured local source address. These routing values are community-corroborated and are not Toyota-published proof for this Supra. A match verifies DME identity routing only; it does not show which standard PIDs are supported or whether coolant/oil temperatures can be read.
 - **Community implementation evidence:** Scapy BMW HSFZ parser and control constants: https://scapy.readthedocs.io/en/stable/api/scapy.contrib.automotive.bmw.hsfz.html
 - **Community implementation evidence:** EdiabasLib configuration (conventional HSFZ diagnostic/control ports): https://github.com/uholeschak/ediabaslib/blob/master/docs/EdiabasLib.config_file.md
 - **Community implementation:** udsoncan UDS implementation/docs: https://github.com/pylessard/python-udsoncan
@@ -33,6 +45,6 @@
 - Python sqlite3 documentation: https://docs.python.org/3/library/sqlite3.html
 - SAE J1979 standards landing page: https://www.sae.org/standards/content/j1979_202202/
 
-These references provide protocol background only. Community HSFZ reports should be treated as provisional until independently corroborated. Toyota documentation confirms a Supra-specific diagnostic cable and Toyota ISTA requirement, not raw ENET host configuration, HSFZ addressing, ECU DIDs, or signal availability. No real 2023 Supra has been tested here.
+These references provide protocol background only. Community HSFZ reports should be treated as provisional until independently corroborated. Toyota documentation confirms a Supra-specific diagnostic cable and Toyota ISTA requirement, not raw ENET host configuration, HSFZ addressing, ECU DIDs, or signal availability. The initial vehicle capture confirms only the bounded HSFZ identification exchange described above.
 
 The Scapy parser specifically documents HSFZ control `0x12` with source/target for a two-byte body and an identification string when the body is longer. This implementation audits and skips these frames during reads; it does not infer a gateway response. Actual Supra gateway keep-alive behavior remains unknown.

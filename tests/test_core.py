@@ -26,7 +26,7 @@ from supra_telemetry.live import HsfzSignalSource
 from supra_telemetry.web import serve
 from supra_telemetry import __main__ as cli
 from supra_telemetry.gateway_check import load_gateway_capture, verify_gateway
-from supra_telemetry.dme_check import DME_TARGET_ADDRESS, verify_dme
+from supra_telemetry.dme_check import DME_TARGET_ADDRESS, DmeVerificationError, verify_dme
 
 
 class CoreTests(unittest.TestCase):
@@ -444,10 +444,23 @@ class CoreTests(unittest.TestCase):
                     recv_frame(sock)
                     sock.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4, uds))
                 worker = threading.Thread(target=rejecting_ecu); worker.start()
-                with self.assertRaises((ConnectionError, ValueError)):
+                with self.assertRaises(DmeVerificationError) as raised:
                     verify_dme(path, connector_factory=lambda *_a, **_kw: left)
                 worker.join(1); right.close()
                 self.assertEqual(left.fileno(), -1)
+                expected = "pending-response" if response == b"\x7f\x22\x78" else (
+                    "negative-response" if response.startswith(b"\x7f") else "identity-response-invalid")
+                self.assertEqual(raised.exception.reason, expected)
+
+            class MalformedClient:
+                closed = False
+                def request(self, _request): raise ValueError("malformed " + vin + " " + mac)
+                def close(self): self.closed = True
+            malformed_client = MalformedClient()
+            with self.assertRaises(DmeVerificationError) as malformed:
+                verify_dme(path, client_factory=lambda *_a, **_kw: malformed_client)
+            self.assertEqual(malformed.exception.reason, "identity-response-invalid")
+            self.assertTrue(malformed_client.closed)
 
             # A stale captured source fails before the HSFZ request is sent.
             path.write_text(json.dumps({"interface": "169.254.10.99", "hsfz": [record]}), encoding="utf-8")
@@ -455,17 +468,26 @@ class CoreTests(unittest.TestCase):
             def bind_failure(address, timeout, *, source_address):
                 bind_attempts.append((address, source_address))
                 raise OSError("source address is not assigned")
-            with self.assertRaises(OSError): verify_dme(path, connector_factory=bind_failure)
+            with self.assertRaises(DmeVerificationError) as bind_error:
+                verify_dme(path, connector_factory=bind_failure)
+            self.assertEqual(bind_error.exception.reason, "connection-or-transport")
             self.assertEqual(bind_attempts, [(('169.254.10.20', 6801), ('169.254.10.99', 0))])
 
-            stdout = io.StringIO()
-            with patch.object(cli, "verify_dme", side_effect=TimeoutError("secret " + vin + " " + mac)), \
-                 contextlib.redirect_stdout(stdout):
-                self.assertEqual(cli.main(["verify-dme", "--capture", str(path)]), 1)
-            self.assertNotIn(vin, stdout.getvalue()); self.assertNotIn(mac, stdout.getvalue())
-            self.assertNotIn("169.254", stdout.getvalue())
-            self.assertEqual(json.loads(stdout.getvalue()),
-                             {"result": "failed", "check": "HSFZ DME identity routing"})
+            cases = ((TimeoutError("secret " + vin + " " + mac + " 169.254.10.20"), "timeout"),
+                     (ConnectionError("HSFZ error control 0x0040"), "hsfz-rejected"),
+                     (ConnectionError("pending UDS response is not accepted"), "pending-response"),
+                     (ConnectionError("socket failure " + vin + " 169.254.10.20"), "connection-or-transport"),
+                     (ValueError("bad capture " + vin + " " + mac), "capture-invalid"),
+                     (RuntimeError("unexpected " + vin + " " + mac + " 169.254.10.20"), "unexpected-error"))
+            for error, reason in cases:
+                stdout = io.StringIO()
+                with patch.object(cli, "verify_dme", side_effect=error), contextlib.redirect_stdout(stdout):
+                    self.assertEqual(cli.main(["verify-dme", "--capture", str(path)]), 1)
+                result = json.loads(stdout.getvalue())
+                self.assertEqual(result, {"result": "failed", "check": "HSFZ DME identity routing", "reason": reason})
+                self.assertEqual(set(result), {"result", "check", "reason"})
+                for secret in (vin, mac, "169.254.10.20", "0x0040"):
+                    self.assertNotIn(secret, stdout.getvalue())
 
     def test_doip_discovery_absolute_deadline(self):
         payload = b"V" * 17 + b"\x12\x34" + b"E" * 6 + b"G" * 6 + b"\x00"

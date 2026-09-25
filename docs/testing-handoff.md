@@ -83,7 +83,7 @@ After gateway identity routing has been verified, the optional DME identity chec
 python -m supra_telemetry verify-dme --capture captures/discovery.json
 ```
 
-It binds to the capture's exact local IPv4 link-local address and sends exactly one UDS VIN request (22 F190) to candidate DME target 0x12 at the captured peer on TCP 6801, using tester address F4. Target 0x12 and tester F4 are community-corroborated conventions; Toyota has not published them for this vehicle. It prints only pass/fail, saves no exchange, and fails on errors or any VIN mismatch. Success verifies only DME identity routing. It does not establish supported PIDs or coolant/oil temperature availability. It does not scan, retry, start a diagnostic session, send tester-present, or read live signals.
+It binds to the capture's exact local IPv4 link-local address and sends exactly one UDS VIN request (22 F190) to candidate DME target 0x12 at the captured peer on TCP 6801, using tester address F4. Target 0x12 and tester F4 are community-corroborated conventions; Toyota has not published them for this vehicle. Failure output includes only a fixed generic reason category; no exchange is saved. Success verifies only DME identity routing. It does not establish supported PIDs or coolant/oil temperature availability. It does not scan, retry, start a diagnostic session, send tester-present, or read live signals.
 
 The capture may contain the VIN, MAC, EID, GID, IP address, or other vehicle identifiers. `captures/` is ignored by Git. Do not commit, publish, paste publicly, or attach an unredacted capture.
 

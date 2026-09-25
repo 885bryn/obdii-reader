@@ -9,7 +9,7 @@ from .doip import discover as discover_doip
 from .engine import AcquisitionEngine
 from .hsfz import discover as discover_hsfz
 from .gateway_check import verify_gateway
-from .dme_check import verify_dme
+from .dme_check import FAILURE_REASONS, failure_reason as dme_failure_reason, verify_dme
 from .live import HsfzSignalSource
 from .models import SignalDefinition, utc_now
 from .profiles import load_profile
@@ -134,8 +134,11 @@ def main(argv=None):
     if args.command == "verify-dme":
         try:
             result = verify_dme(args.capture, args.timeout)
-        except Exception:
-            print(json.dumps({"result": "failed", "check": "HSFZ DME identity routing"}))
+        except Exception as exc:
+            reason = dme_failure_reason(exc)
+            if reason not in FAILURE_REASONS:
+                reason = "unexpected-error"
+            print(json.dumps({"result": "failed", "check": "HSFZ DME identity routing", "reason": reason}))
             return 1
         print(json.dumps(result))
         return 0

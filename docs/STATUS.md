@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "verification",
+  "workflow_stage": "handoff",
   "health": "healthy",
-  "updated_at": "2026-09-26T21:56:31-07:00",
+  "updated_at": "2026-09-26T22:00:18-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -58,8 +58,8 @@
     "summary": "Independent review approved the one-request support checker with no substantive findings; review confirmed source binding, exact request scope, redacted failure output, cleanup, and no retry, scan, persistence, or write path."
   },
   "integration": {
-    "status": "unmerged",
-    "summary": "The reviewed M009 support checker, priority decision, and operational-record migration are local working-tree changes and have not been committed or synchronized."
+    "status": "synchronized",
+    "summary": "The reviewed M009 support checker, priority decision, and operational-record migration were committed on main at 7aab972 and pushed to origin/main."
   },
   "handoff": {
     "summary": "M009's first support-only checker is implemented, offline-verified, and reviewed. Its single vehicle request has not run. After the bounded result, add value reads only for supported signals. M010 fault diagnostics and M011 vehicle information remain next in order."

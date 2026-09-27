@@ -12,6 +12,9 @@ from .gateway_check import verify_gateway
 from .dme_check import FAILURE_REASONS, failure_reason as dme_failure_reason, verify_dme
 from .temperature_support import (FAILURE_REASONS as TEMPERATURE_FAILURE_REASONS,
                                   TemperatureSupportError, verify_temperature_support)
+from .common_dme_support import (CHECK_NAME as COMMON_DME_SUPPORT_CHECK,
+                                 FAILURE_REASONS as COMMON_DME_SUPPORT_FAILURE_REASONS,
+                                 CommonDmeSupportError, verify_common_dme_support)
 from .temperature_values import (CHECK_NAME as TEMPERATURE_VALUES_CHECK,
                                  FAILURE_REASONS as TEMPERATURE_VALUES_FAILURE_REASONS,
                                  TemperatureValueError, read_temperature_values)
@@ -115,6 +118,9 @@ def main(argv=None):
     temp_support = sub.add_parser("verify-temperature-support", help="bounded SAE Mode 01 PID support check")
     temp_support.add_argument("--capture", required=True, help="private JSON file created by discover")
     temp_support.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    common_support = sub.add_parser("verify-common-dme-support", help="one bounded SAE Mode 01 common-signal support check")
+    common_support.add_argument("--capture", required=True, help="private JSON file created by discover")
+    common_support.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     temp_values = sub.add_parser("read-temperature-values", help="one-shot coolant and oil temperature reads")
     temp_values.add_argument("--capture", required=True, help="private JSON file created by discover")
     temp_values.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
@@ -169,6 +175,28 @@ def main(argv=None):
             return 1
         except Exception:
             print(json.dumps({"result": "failed", "check": "HSFZ DME temperature PID support", "reason": "unexpected-error"}))
+            return 1
+        print(json.dumps(result))
+        return 0
+    if args.command == "verify-common-dme-support":
+        try:
+            result = verify_common_dme_support(args.capture, args.timeout)
+        except CommonDmeSupportError as exc:
+            reason = exc.reason if exc.reason in COMMON_DME_SUPPORT_FAILURE_REASONS else "unexpected-error"
+            print(json.dumps({"result": "failed", "check": COMMON_DME_SUPPORT_CHECK,
+                              "engine_rpm_pid_0c_supported": None,
+                              "vehicle_speed_pid_0d_supported": None,
+                              "intake_air_temp_pid_0f_supported": None,
+                              "throttle_position_pid_11_supported": None,
+                              "requests_sent": exc.requests_sent, "reason": reason}))
+            return 1
+        except Exception:
+            print(json.dumps({"result": "failed", "check": COMMON_DME_SUPPORT_CHECK,
+                              "engine_rpm_pid_0c_supported": None,
+                              "vehicle_speed_pid_0d_supported": None,
+                              "intake_air_temp_pid_0f_supported": None,
+                              "throttle_position_pid_11_supported": None,
+                              "requests_sent": 0, "reason": "unexpected-error"}))
             return 1
         print(json.dumps(result))
         return 0

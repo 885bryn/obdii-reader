@@ -12,8 +12,12 @@
 - On 2026-09-24, with a stationary 2023 GR Supra, engine off, the USB Ethernet adapter established an IPv4 link-local connection and the application received one syntactically valid HSFZ vehicle-identification response to its bounded UDP 6811 request.
 - The response contained the expected HSFZ identification marker and vehicle-specific identity fields. The peer address, VIN, MAC, and raw datagram remain only in the ignored local capture and are intentionally excluded from tracked documentation.
 - The same bounded discovery attempt received no DoIP vehicle announcement. This records that attempt's result; it does not prove that the vehicle never supports DoIP in other states or configurations.
+- On 2026-09-26, after a clean five-minute power-down, the user confirmed a charger-connected, PAD-active stationary setup. Host preflight showed the Ethernet adapter up at 100 Mbps with exactly one link-local address and AC USB selective suspend disabled. Fresh redacted discovery again found one HSFZ gateway and no DoIP announcement.
 - A subsequent connection-only check to the discovered peer's conventional HSFZ TCP port 6801 succeeded and then closed without sending an application payload. This verifies TCP reachability only.
-- The initial discovery and connection-only checks sent no ECU diagnostic request. The user later reported that the separately reviewed, single-request `verify-gateway` VIN identity check succeeded. This verifies gateway identity routing only; it does not verify a DME target, supported PID/DID, decoder, value, or polling rate.
+- `verify-gateway` and `verify-dme` each succeeded with one read-only VIN identity request in the clean session. The latter verifies DME identity routing through candidate target 0x12 on this vehicle; the address was community-derived before the vehicle result, not guessed from that result. Earlier failed connection and DME attempts remain historical evidence only and did not establish the route.
+- `verify-temperature-support` reported coolant PID 05 and engine-oil-temperature PID 5C supported. A separate `read-temperature-values` one-shot read returned both values, including in normal engine-running mode without PAD/Diagnostic Mode.
+- One `monitor-temperatures` run completed for 300 seconds on 2026-09-26 in normal engine-running mode without PAD/Diagnostic Mode. Logging was off; it exited cleanly with no observed acquisition or recording error. Approximate completed-pair rate was 0.49–0.50 per second. This verifies only that bounded run.
+- Staged USB isolation left the Ethernet adapter healthy alone and with ENET, and the link remained up during the successful normal-mode read. The earlier Windows Code 43 / Port Reset Failed event is therefore classified as a laptop USB enumeration/reset incident, not evidence that PAD or a different vehicle protocol is required.
 
 ## Inferred
 
@@ -22,8 +26,10 @@
 
 ## Unknown / empirical
 
-- Whether candidate DME target 0x12 routes on this Supra, and the vehicle's DME session needs, supported PIDs/DIDs, polling limits, and keep-alive requirements. The user-reported gateway VIN success does not answer those DME-specific questions.
-- Actual update rate and any transmission/chassis-specific data exposure.
+- Behavior beyond the single 300-second monitor run and monitor behavior with recording enabled.
+- DME session requirements, battery-support limits, vehicle request limits beyond the observed bounded cadence, and HSFZ keep-alive requirements.
+- Support and safe interpretation of signals beyond coolant PID 05 and engine-oil-temperature PID 5C; transmission/chassis signals remain unverified.
+- DoIP routing and support. The bounded discovery attempt saw no DoIP announcement, and live DoIP routing is not implemented.
 
 ## References
 

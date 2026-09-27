@@ -29,9 +29,124 @@ from supra_telemetry.gateway_check import load_gateway_capture, verify_gateway
 from supra_telemetry.dme_check import DME_TARGET_ADDRESS, DmeVerificationError, verify_dme
 from supra_telemetry.temperature_support import (TemperatureSupportError, pid_supported,
                                                 verify_temperature_support)
+from supra_telemetry.temperature_values import (TemperatureValueError, decode_temperature,
+                                                parse_temperature_response, read_temperature_values)
 
 
 class CoreTests(unittest.TestCase):
+    def test_temperature_value_decoder_requires_exact_responses(self):
+        self.assertEqual([decode_temperature(value) for value in (0, 40, 100, 255)], [-40, 0, 60, 215])
+        self.assertEqual(parse_temperature_response(b"\x41\x05\x50", 0x05), 40)
+        self.assertEqual(parse_temperature_response(b"\x41\x5c\x28", 0x5c), 0)
+        for value in (-1, 256, True, 1.5):
+            with self.assertRaises(ValueError): decode_temperature(value)
+        for response, pid in ((b"\x41\x05", 5), (b"\x41\x05\x01\x02", 5),
+                              (b"\x41\x5c\x01", 5), (b"\x7f\x01\x31", 5),
+                              (b"\x41\x05\x01", 0x06)):
+            with self.assertRaises(ValueError): parse_temperature_response(response, pid)
+
+    def test_temperature_value_reader_exact_sequence_binding_failure_and_privacy(self):
+        vin, mac = "TESTVIN0000000001", "001122334455"
+        body = b"DIAGADR10BMWMAC" + mac.encode() + b"BMWVIN" + vin.encode()
+        packet = struct.pack(">IH", len(body), 0x11) + body
+        record = {"peer": "169.254.10.20", "port": 6811,
+                  "identification": {"vin": vin, "mac": mac, "diagnostic_address": 0x10},
+                  "raw_hex": packet.hex()}
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "capture.json"
+            path.write_text(json.dumps({"interface": "169.254.10.30", "hsfz": [record]}), encoding="utf-8")
+
+            left, right = socket.socketpair(); seen = []
+            def ecu():
+                for request, response in ((b"\x01\x05", b"\x41\x05\x50"),
+                                          (b"\x01\x5c", b"\x41\x5c\x46")):
+                    frame = recv_frame(right); seen.append(frame)
+                    self.assertEqual(frame.payload, request)
+                    right.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4, response))
+            worker = threading.Thread(target=ecu); worker.start()
+            created = []
+            def factory(*args, **kwargs):
+                created.append((args, kwargs))
+                return HsfzClient(*args, **kwargs)
+            def connector(address, timeout, *, source_address):
+                self.assertEqual((address, source_address), (("169.254.10.20", 6801), ("169.254.10.30", 0)))
+                return left
+            result = read_temperature_values(path, client_factory=factory, connector_factory=connector)
+            worker.join(1); right.close()
+            self.assertEqual(result, {"result": "verified", "check": "HSFZ DME temperature values",
+                                      "coolant_temp_c": 40, "engine_oil_temp_c": 30, "requests_sent": 2})
+            self.assertEqual(len(created), 1)
+            args, kwargs = created[0]
+            self.assertEqual(args[:3], ("169.254.10.20", 0xF4, DME_TARGET_ADDRESS))
+            self.assertEqual((kwargs["port"], kwargs["fail_on_pending"]), (6801, True))
+            self.assertEqual([f.payload for f in seen], [b"\x01\x05", b"\x01\x5c"])
+            self.assertEqual(left.fileno(), -1)
+
+            # A first-request failure sends no oil request and still closes the socket.
+            left, right = socket.socketpair(); received = []
+            def first_failure():
+                received.append(recv_frame(right))
+                right.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4, b"\x7f\x01\x31"))
+            worker = threading.Thread(target=first_failure); worker.start()
+            with self.assertRaises(TemperatureValueError) as raised:
+                read_temperature_values(path, connector_factory=lambda *_a, **_k: left)
+            worker.join(1); right.settimeout(.1)
+            self.assertEqual(raised.exception.reason, "uds-rejected")
+            self.assertEqual(raised.exception.requests_sent, 1)
+            self.assertEqual([f.payload for f in received], [b"\x01\x05"])
+            self.assertEqual(left.fileno(), -1); right.close()
+
+            # A second-request failure reports two sends, never retries, and redacts secrets.
+            left, right = socket.socketpair(); received = []
+            def second_failure():
+                received.append(recv_frame(right))
+                right.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4, b"\x41\x05\x50"))
+                received.append(recv_frame(right))
+                right.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4, b"\x41\x5c"))
+            worker = threading.Thread(target=second_failure); worker.start()
+            with self.assertRaises(TemperatureValueError) as raised:
+                read_temperature_values(path, connector_factory=lambda *_a, **_k: left)
+            worker.join(1)
+            self.assertEqual(raised.exception.reason, "response-invalid")
+            self.assertEqual(raised.exception.requests_sent, 2)
+            self.assertEqual([f.payload for f in received], [b"\x01\x05", b"\x01\x5c"])
+            self.assertEqual(left.fileno(), -1); right.close()
+
+            stdout = io.StringIO()
+            with patch.object(cli, "read_temperature_values", side_effect=TemperatureValueError("response-invalid", 2)), contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["read-temperature-values", "--capture", str(path)]), 1)
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(result, {"result": "failed", "check": "HSFZ DME temperature values",
+                                      "coolant_temp_c": None, "engine_oil_temp_c": None,
+                                      "requests_sent": 2, "reason": "response-invalid"})
+            for secret in (vin, mac, "169.254.10.20", packet.hex()):
+                self.assertNotIn(secret, stdout.getvalue())
+
+            # Wrong HSFZ responder address is rejected by correlation before decoding.
+            left, right = socket.socketpair()
+            def uncorrelated():
+                recv_frame(right)
+                right.sendall(encode_frame(1, 0x11, 0xF4, b"\x41\x05\x50"))
+            worker = threading.Thread(target=uncorrelated); worker.start()
+            with self.assertRaises(TemperatureValueError) as raised:
+                read_temperature_values(path, timeout=.1, connector_factory=lambda *_a, **_k: left)
+            worker.join(1); right.close()
+            self.assertEqual(raised.exception.reason, "connection-or-transport")
+            self.assertEqual(raised.exception.requests_sent, 1)
+            self.assertEqual(left.fileno(), -1)
+
+            # Timeout after the ECU receives the first frame still counts its possible transmission.
+            left, right = socket.socketpair(); received = []
+            def silent_peer(): received.append(recv_frame(right))
+            worker = threading.Thread(target=silent_peer); worker.start()
+            with self.assertRaises(TemperatureValueError) as raised:
+                read_temperature_values(path, timeout=.1, connector_factory=lambda *_a, **_k: left)
+            worker.join(1); right.close()
+            self.assertEqual(raised.exception.reason, "timeout")
+            self.assertEqual(raised.exception.requests_sent, 1)
+            self.assertEqual([frame.payload for frame in received], [b"\x01\x05"])
+            self.assertEqual(left.fileno(), -1)
+
     def test_discover_redacts_console_but_preserves_full_json_capture(self):
         hsfz = [{"peer": "198.51.100.20", "port": 6811,
                  "identification": {"vin": "TESTVIN0000000001", "mac": "001122334455"},

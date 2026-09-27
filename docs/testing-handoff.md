@@ -93,6 +93,14 @@ python -m supra_telemetry verify-temperature-support --capture captures/discover
 
 It binds TCP to the capture's exact local interface address and uses the fixed candidate DME target 0x12 and tester F4. It reads SAE J1979 Mode 01 support bitmaps: PID 00 always, PID 20 only if PID 00 advertises continuation, and PID 40 only if PID 20 advertises continuation. It sends at most three requests on one client and stops on any error. It never requests PID 05 or PID 5C values. Output contains support booleans for coolant PID 05 and oil-temperature PID 5C plus request count, or a fixed generic failure reason. A support bit advertises ECU support according to the standard bitmap; it does not prove that a future value response is plausible, correctly scaled, or safe to poll.
 
+Only if that check verifies both PIDs on this vehicle, the separate optional value check may be run:
+
+```powershell
+python -m supra_telemetry read-temperature-values --capture captures/discovery.json
+```
+
+This is a one-shot read, not polling. On one connection it attempts at most two application requests total: Mode 01 PID 05 exactly once, then Mode 01 PID 5C exactly once. If the first request fails, the second is not sent. It performs no bitmap repeats, retries, scans, tester-present traffic, session changes, fault clearing, routines, actuator/security requests, writes, or raw persistence. Only exact positive replies `41 05 xx` and `41 5C xx` are accepted, with each value decoded as raw byte minus 40 °C. Output omits vehicle identifiers and raw responses. `requests_sent` counts attempts conservatively and is an upper bound on possibly transmitted requests when a failure leaves transmission uncertain. The support bitmap has been verified on this vehicle; actual values remain unverified until this controlled run.
+
 The capture may contain the VIN, MAC, EID, GID, IP address, or other vehicle identifiers. `captures/` is ignored by Git. Do not commit, publish, paste publicly, or attach an unredacted capture.
 
 ## 6. Continue in Codex

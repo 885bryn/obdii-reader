@@ -20,6 +20,7 @@ from .models import SignalDefinition, utc_now
 from .profiles import load_profile
 from .storage import TelemetryStore, export_csv
 from .web import serve
+from .temperature_monitor import TemperatureMonitorSource, run_monitor
 
 
 def demo_signals():
@@ -117,6 +118,12 @@ def main(argv=None):
     temp_values = sub.add_parser("read-temperature-values", help="one-shot coolant and oil temperature reads")
     temp_values.add_argument("--capture", required=True, help="private JSON file created by discover")
     temp_values.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    monitor = sub.add_parser("monitor-temperatures", help="bounded local dashboard for repeated coolant and oil temperature reads")
+    monitor.add_argument("--capture", required=True, help="private JSON file created by discover")
+    monitor.add_argument("--db", help="optional SQLite sample log (off by default)")
+    monitor.add_argument("--duration", type=int, default=300, help="automatic stop in seconds (1 to 300)")
+    monitor.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    monitor.add_argument("--ui-host", default="127.0.0.1"); monitor.add_argument("--port", type=int, default=8765)
     run = sub.add_parser("run", help="live HSFZ reads using a verified, address-explicit profile")
     run.add_argument("--profile", required=True); run.add_argument("--host", required=True, help="explicit discovered gateway IPv4 address"); run.add_argument("--db", required=True)
     run.add_argument("--ui-host", default="127.0.0.1"); run.add_argument("--port", type=int, default=8765); run.add_argument("--interval", type=float, default=1.0); run.add_argument("--timeout", type=float, default=2.0)
@@ -182,6 +189,27 @@ def main(argv=None):
             return 1
         print(json.dumps(result))
         return 0
+    if args.command == "monitor-temperatures":
+        if not 1 <= args.duration <= 300:
+            parser.error("duration must be between 1 and 300 seconds")
+        if not 0.1 <= args.timeout <= 5.0:
+            parser.error("timeout must be between 0.1 and 5 seconds")
+        if args.ui_host not in ("127.0.0.1", "localhost", "::1"):
+            parser.error("dashboard must bind to loopback")
+        store = TelemetryStore(args.db) if args.db else None
+        try:
+            source = TemperatureMonitorSource(args.capture, timeout=args.timeout)
+        except Exception:
+            if store: store.close()
+            print(json.dumps({"result": "failed", "check": "temperature monitor", "reason": "capture-or-connection-invalid"}))
+            return 1
+        try:
+            status = run_monitor(source, store=store, duration=args.duration,
+                                 host=args.ui_host, port=args.port)
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "temperature monitor", "reason": "monitor-stopped"}))
+            return 1
+        return status
     if not 0.1 <= args.interval <= 10:
         parser.error("interval must be between 0.1 and 10 seconds")
     if args.command == "demo":

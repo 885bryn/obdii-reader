@@ -99,7 +99,9 @@ Only if that check verifies both PIDs on this vehicle, the separate optional val
 python -m supra_telemetry read-temperature-values --capture captures/discovery.json
 ```
 
-This is a one-shot read, not polling. On one connection it attempts at most two application requests total: Mode 01 PID 05 exactly once, then Mode 01 PID 5C exactly once. If the first request fails, the second is not sent. It performs no bitmap repeats, retries, scans, tester-present traffic, session changes, fault clearing, routines, actuator/security requests, writes, or raw persistence. Only exact positive replies `41 05 xx` and `41 5C xx` are accepted, with each value decoded as raw byte minus 40 °C. Output omits vehicle identifiers and raw responses. `requests_sent` counts attempts conservatively and is an upper bound on possibly transmitted requests when a failure leaves transmission uncertain. The support bitmap has been verified on this vehicle; actual values remain unverified until this controlled run.
+This is a one-shot read, not polling. On one connection it attempts at most two application requests total: Mode 01 PID 05 exactly once, then Mode 01 PID 5C exactly once. If the first request fails, the second is not sent. It performs no bitmap repeats, retries, scans, tester-present traffic, session changes, fault clearing, routines, actuator/security requests, writes, or raw persistence. Only exact positive replies `41 05 xx` and `41 5C xx` are accepted, with each value decoded as raw byte minus 40 °C. Output omits vehicle identifiers and raw responses. `requests_sent` counts attempts conservatively and is an upper bound on possibly transmitted requests when a failure leaves transmission uncertain. Both values have since been read successfully with the engine running in normal mode without PAD/Diagnostic Mode.
+
+The repeated monitor is available as `python -m supra_telemetry monitor-temperatures --capture captures/discovery.json`. It binds to the exact captured interface and uses the now one-shot-verified route (tester F4, DME target 0x12, TCP 6801). Each cycle sends exactly `01 05`, then `01 5C`, with at least 2 seconds idle after the prior completed cycle. At the 300-second default duration it starts no more requests and closes the dashboard; an already-started request may finish or reach its bounded timeout before process cleanup finishes. A request failure halts traffic, closes the dashboard, and returns a failed command status; it does not retry or reconnect. The dashboard binds to loopback. Add `--db <path>` only to opt into sample logging; no raw exchanges or vehicle/network identifiers are stored. Normal-mode engine-running one-shot success is known; repeated monitor behavior remains untested on the vehicle.
 
 The capture may contain the VIN, MAC, EID, GID, IP address, or other vehicle identifiers. `captures/` is ignored by Git. Do not commit, publish, paste publicly, or attach an unredacted capture.
 
@@ -117,13 +119,13 @@ Expected outcomes:
 
 ### Initial observed checkpoint
 
-On 2026-09-24, a stationary, engine-off 2023 GR Supra returned one valid HSFZ identification response over an IPv4 link-local ENET connection. The same bounded attempt returned no DoIP announcement. A later connection-only check confirmed that the discovered peer accepts TCP connections on port 6801; it sent no application payload. The user subsequently reported that the separately reviewed `verify-gateway` command succeeded, confirming one gateway VIN identity route. Unique vehicle and network identifiers remain in the ignored local capture and must not be copied into tracked documentation. This checkpoint does not verify the DME route, any temperature PID, or the live polling gate below.
+On 2026-09-24, a stationary, engine-off 2023 GR Supra returned one valid HSFZ identification response over an IPv4 link-local ENET connection. The same bounded attempt returned no DoIP announcement. Subsequent user-confirmed checks established gateway and DME identity routing, temperature PID support, and one successful two-temperature read with the engine running in normal mode without PAD/Diagnostic Mode. Unique vehicle and network identifiers remain in the ignored local capture and must not be copied into tracked documentation. Repeated temperature monitoring has not been vehicle-tested.
 
 ## 7. Live polling gate
 
 Do not run `python -m supra_telemetry run` with the supplied template. It is intentionally unverified and contains no enabled vehicle signals or ECU target addresses.
 
-Live polling can begin only after all of the following are documented:
+The generic profile-driven `run` path remains gated on the following:
 
 - the observed transport and gateway address;
 - a physically addressed ECU target from trustworthy evidence;

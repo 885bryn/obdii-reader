@@ -99,9 +99,9 @@ The separately bounded common-DME support check is:
 python -m supra_telemetry verify-common-dme-support --capture captures/discovery.json
 ```
 
-It uses the same source-bound, previously verified DME route and sends exactly one `01 00` bitmap request. It reports whether the DME advertises RPM PID 0C, vehicle speed PID 0D, intake-air-temperature PID 0F, and throttle-position PID 11, plus a conservative request count. It never requests those values, retries, scans, polls, changes session, sends tester-present, writes, actuates, or persists the exchange. The implementation passed 42 offline tests and independent review, but this check has not yet been run on the vehicle. A properly prepared Diagnostic/PAD Mode session may be used for this bounded information-gathering step, provided the vehicle state is recorded. That result does not establish normal-mode product behavior; every finished signal path must later pass a separate reviewed test with Diagnostic/PAD Mode off. Use the command only as a separately reviewed one-command action and stop after the result or on any warning or error.
+It uses the same source-bound, previously verified DME route and sends exactly one `01 00` bitmap request. It reports whether the DME advertises RPM PID 0C, vehicle speed PID 0D, intake-air-temperature PID 0F, and throttle-position PID 11, plus a conservative request count. It never requests those values, retries, scans, polls, changes session, sends tester-present, writes, actuates, or persists the exchange. The implementation passed 42 offline tests and independent review. On 2026-09-27, the command ran once on the stationary vehicle with the engine off and PAD/Diagnostic Mode off; its single reported request advertised all four candidate PIDs and exited successfully. This establishes support bits only, not plausible values or safe polling. Do not repeat it merely to reconfirm the result. The next vehicle action must wait for a separately implemented and reviewed bounded value-read procedure.
 
-Only if that check verifies both PIDs on this vehicle, the separate optional value check may be run:
+The already completed temperature support check verified both temperature PIDs on this vehicle, so its separate optional value check is available as:
 
 ```powershell
 python -m supra_telemetry read-temperature-values --capture captures/discovery.json

@@ -17,6 +17,7 @@
 - `verify-gateway` and `verify-dme` each succeeded with one read-only VIN identity request in the clean session. The latter verifies DME identity routing through candidate target 0x12 on this vehicle; the address was community-derived before the vehicle result, not guessed from that result. Earlier failed connection and DME attempts remain historical evidence only and did not establish the route.
 - `verify-temperature-support` reported coolant PID 05 and engine-oil-temperature PID 5C supported. A separate `read-temperature-values` one-shot read returned both values, including in normal engine-running mode without PAD/Diagnostic Mode.
 - One `monitor-temperatures` run completed for 300 seconds on 2026-09-26 in normal engine-running mode without PAD/Diagnostic Mode. Logging was off; it exited cleanly with no observed acquisition or recording error. Approximate completed-pair rate was 0.49–0.50 per second. This verifies only that bounded run.
+- On 2026-09-27, `verify-common-dme-support` completed once on the stationary vehicle with the engine off and PAD/Diagnostic Mode off. Its single Mode 01 PID `00` request reported advertised support for engine RPM PID `0C`, vehicle speed PID `0D`, intake-air-temperature PID `0F`, and throttle-position PID `11`, then exited successfully. This verifies support bits only, not value behavior or polling safety.
 - Staged USB isolation left the Ethernet adapter healthy alone and with ENET, and the link remained up during the successful normal-mode read. The earlier Windows Code 43 / Port Reset Failed event is therefore classified as a laptop USB enumeration/reset incident, not evidence that PAD or a different vehicle protocol is required.
 
 ## Inferred
@@ -28,7 +29,7 @@
 
 - Behavior beyond the single 300-second monitor run and monitor behavior with recording enabled.
 - DME session requirements, battery-support limits, vehicle request limits beyond the observed bounded cadence, and HSFZ keep-alive requirements.
-- Support and safe interpretation of signals beyond coolant PID 05 and engine-oil-temperature PID 5C; transmission/chassis signals remain unverified.
+- Value responses, stationary plausibility, and safe acquisition cadence for the support-advertised PIDs `0C`, `0D`, `0F`, and `11`; transmission/chassis signals remain unverified.
 - DoIP routing and support. The bounded discovery attempt saw no DoIP announcement, and live DoIP routing is not implemented.
 
 ## References

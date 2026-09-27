@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "handoff",
+  "workflow_stage": "implementation",
   "health": "healthy",
-  "updated_at": "2026-09-26T22:00:18-07:00",
+  "updated_at": "2026-09-27T16:27:35-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -19,28 +19,29 @@
     "milestone": {
       "id": "M009",
       "title": "Common DME live sensors",
-      "status": "implemented",
+      "status": "in_progress",
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-1",
-      "title": "Verify common DME PID support bitmap",
-      "status": "implemented",
-      "path": "supra_telemetry/common_dme_support.py"
+      "id": "T009-2",
+      "title": "Add bounded common DME one-shot value reads",
+      "status": "planned",
+      "path": "docs/roadmap.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "A bounded 300-second coolant and oil-temperature monitor completed on the stationary vehicle in normal engine-running mode without PAD, with logging off, a clean exit, no observed acquisition or recording errors, and approximately 0.49–0.50 completed pairs per second.",
-    "at": "2026-09-26T20:54:50-07:00",
+    "summary": "One bounded common-DME support check completed on the stationary vehicle with the engine off and Diagnostic/PAD Mode off. Its single Mode 01 PID 00 request reported advertised support for engine RPM PID 0C, vehicle speed PID 0D, intake-air-temperature PID 0F, and throttle-position PID 11, then exited successfully.",
+    "at": "2026-09-27T16:27:00-07:00",
     "evidence": [
       "docs/PROJECT_HISTORY.md",
-      "tests/test_temperature_monitor.py"
+      "supra_telemetry/common_dme_support.py",
+      "tests/test_common_dme_signals.py"
     ]
   },
   "next_action": {
-    "summary": "When the stationary vehicle and stable ENET setup are available, run the reviewed verify-common-dme-support command at most once and record whether Diagnostic/PAD Mode was used. This research check may use Diagnostic/PAD Mode, but finished signal behavior must later be verified separately with that mode off.",
-    "owner": "user",
-    "reference": "docs/safety.md"
+    "summary": "Implement and independently review a bounded, fail-closed one-shot value-read path for the four now-advertised common DME PIDs. Do not send those value requests to the vehicle until their exact request, response validation, limits, and stationary plausibility procedure have been separately reviewed.",
+    "owner": "agent",
+    "reference": "docs/roadmap.md"
   },
   "attention": [],
   "architecture": {
@@ -50,8 +51,8 @@
   },
   "verification": {
     "status": "passed",
-    "summary": "The one-request common-DME support checker passed 3 focused tests and the full 42-test offline suite. Vehicle support bits remain unverified until the separately bounded car check runs.",
-    "verified_at": "2026-09-26T21:54:47-07:00"
+    "summary": "The one-request common-DME support checker had already passed 3 focused tests and the full 42-test offline suite. Its first bounded vehicle run then succeeded with exactly one reported request and all four candidate support bits advertised. Value behavior and repeated acquisition remain unverified.",
+    "verified_at": "2026-09-27T16:27:00-07:00"
   },
   "review": {
     "status": "approved",
@@ -59,10 +60,10 @@
   },
   "integration": {
     "status": "synchronized",
-    "summary": "The reviewed M009 support checker, priority decision, and operational-record migration were committed on main at 7aab972 and pushed to origin/main."
+    "summary": "The verified common-DME support result and reconciled operational records are synchronized on main without private vehicle or network identifiers."
   },
   "handoff": {
-    "summary": "M009's first support-only checker is implemented, offline-verified, and reviewed. Its single vehicle request has not run. After the bounded result, add value reads only for supported signals. M010 fault diagnostics and M011 vehicle information remain next in order."
+    "summary": "M009's support-only checker is implemented, offline-verified, independently reviewed, and vehicle-verified in one stationary engine-off/PAD-off run. The DME advertised all four candidate PIDs. Next add bounded value reads, then verify plausibility while stationary before considering repeated monitoring. M010 fault diagnostics and M011 vehicle information remain next in order."
   }
 }
 ---

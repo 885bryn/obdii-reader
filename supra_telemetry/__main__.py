@@ -10,6 +10,8 @@ from .engine import AcquisitionEngine
 from .hsfz import discover as discover_hsfz
 from .gateway_check import verify_gateway
 from .dme_check import FAILURE_REASONS, failure_reason as dme_failure_reason, verify_dme
+from .temperature_support import (FAILURE_REASONS as TEMPERATURE_FAILURE_REASONS,
+                                  TemperatureSupportError, verify_temperature_support)
 from .live import HsfzSignalSource
 from .models import SignalDefinition, utc_now
 from .profiles import load_profile
@@ -106,6 +108,9 @@ def main(argv=None):
     dme = sub.add_parser("verify-dme", help="one bounded, read-only DME identity check using a private discovery capture")
     dme.add_argument("--capture", required=True, help="private JSON file created by discover")
     dme.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    temp_support = sub.add_parser("verify-temperature-support", help="bounded SAE Mode 01 PID support check")
+    temp_support.add_argument("--capture", required=True, help="private JSON file created by discover")
+    temp_support.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     run = sub.add_parser("run", help="live HSFZ reads using a verified, address-explicit profile")
     run.add_argument("--profile", required=True); run.add_argument("--host", required=True, help="explicit discovered gateway IPv4 address"); run.add_argument("--db", required=True)
     run.add_argument("--ui-host", default="127.0.0.1"); run.add_argument("--port", type=int, default=8765); run.add_argument("--interval", type=float, default=1.0); run.add_argument("--timeout", type=float, default=2.0)
@@ -139,6 +144,18 @@ def main(argv=None):
             if reason not in FAILURE_REASONS:
                 reason = "unexpected-error"
             print(json.dumps({"result": "failed", "check": "HSFZ DME identity routing", "reason": reason}))
+            return 1
+        print(json.dumps(result))
+        return 0
+    if args.command == "verify-temperature-support":
+        try:
+            result = verify_temperature_support(args.capture, args.timeout)
+        except TemperatureSupportError as exc:
+            reason = exc.reason if exc.reason in TEMPERATURE_FAILURE_REASONS else "unexpected-error"
+            print(json.dumps({"result": "failed", "check": "HSFZ DME temperature PID support", "reason": reason}))
+            return 1
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "HSFZ DME temperature PID support", "reason": "unexpected-error"}))
             return 1
         print(json.dumps(result))
         return 0

@@ -27,6 +27,8 @@ from supra_telemetry.web import serve
 from supra_telemetry import __main__ as cli
 from supra_telemetry.gateway_check import load_gateway_capture, verify_gateway
 from supra_telemetry.dme_check import DME_TARGET_ADDRESS, DmeVerificationError, verify_dme
+from supra_telemetry.temperature_support import (TemperatureSupportError, pid_supported,
+                                                verify_temperature_support)
 
 
 class CoreTests(unittest.TestCase):
@@ -488,6 +490,112 @@ class CoreTests(unittest.TestCase):
                 self.assertEqual(set(result), {"result", "check", "reason"})
                 for secret in (vin, mac, "169.254.10.20", "0x0040"):
                     self.assertNotIn(secret, stdout.getvalue())
+
+    def test_temperature_support_bitmaps_are_bounded_conditional_and_redacted(self):
+        vin, mac = "TESTVIN0000000001", "001122334455"
+        body = b"DIAGADR10BMWMAC" + mac.encode() + b"BMWVIN" + vin.encode()
+        packet = struct.pack(">IH", len(body), 0x11) + body
+        record = {"peer": "169.254.10.20", "port": 6811,
+                  "identification": {"vin": vin, "mac": mac, "diagnostic_address": 0x10},
+                  "raw_hex": packet.hex()}
+
+        def bitmap_for(base, supported):
+            value = 0
+            for pid in supported:
+                value |= 1 << (32 - (pid - base))
+            return value.to_bytes(4, "big")
+
+        # Independent SAE bitmap vectors: PID 05 is bit 3 of the first byte;
+        # PID 5C is bit 4 of the PID 40 bitmap's last byte.
+        self.assertTrue(pid_supported(bytes.fromhex("08000000"), 0x00, 0x05))
+        self.assertTrue(pid_supported(bytes.fromhex("00000010"), 0x40, 0x5C))
+        self.assertTrue(pid_supported(bitmap_for(0, [5, 0x20]), 0, 5))
+        self.assertTrue(pid_supported(bitmap_for(0x40, [0x5C]), 0x40, 0x5C))
+        with self.assertRaises(ValueError): pid_supported(b"\0\0\0", 0, 5)
+
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "capture.json"
+            path.write_text(json.dumps({"interface": "169.254.10.30", "hsfz": [record]}), encoding="utf-8")
+            # Continuation at PID 20 and 40 requests exactly three bitmaps.
+            left, right = socket.socketpair(); seen = []
+            def ecu():
+                for base, supported in ((0, [5, 0x20]), (0x20, [0x40]), (0x40, [0x5C])):
+                    frame = recv_frame(right); seen.append(frame)
+                    right.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4,
+                                               bytes((0x41, base)) + bitmap_for(base, supported)))
+            worker = threading.Thread(target=ecu); worker.start()
+            created = []
+            def factory(address, timeout, *, source_address):
+                created.append((address, source_address)); return left
+            result = verify_temperature_support(path, connector_factory=factory)
+            worker.join(1); right.close()
+            self.assertEqual(result, {"result": "verified", "check": "HSFZ DME temperature PID support",
+                                      "coolant_pid_05_supported": True,
+                                      "engine_oil_temp_pid_5c_supported": True, "requests_sent": 3})
+            self.assertEqual(created, [(('169.254.10.20', 6801), ('169.254.10.30', 0))])
+            self.assertEqual([frame.payload for frame in seen], [b"\x01\x00", b"\x01\x20", b"\x01\x40"])
+            self.assertTrue(all((frame.source, frame.target) == (0xF4, DME_TARGET_ADDRESS) for frame in seen))
+            self.assertEqual(left.fileno(), -1)
+
+            # Missing continuation stops early and reports the actual request count.
+            left, right = socket.socketpair()
+            def no_continuation():
+                frame = recv_frame(right)
+                right.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4,
+                                           b"\x41\x00" + bitmap_for(0, [5])))
+            worker = threading.Thread(target=no_continuation); worker.start()
+            result = verify_temperature_support(path, connector_factory=lambda *_a, **_k: left)
+            worker.join(1); right.close()
+            self.assertEqual(result["requests_sent"], 1)
+            self.assertFalse(result["engine_oil_temp_pid_5c_supported"])
+            self.assertEqual(left.fileno(), -1)
+
+            # PID 00 advertises PID 20; PID 20 does not advertise PID 40.
+            left, right = socket.socketpair(); seen = []
+            def stop_after_pid20():
+                for base, bitmap in ((0x00, bytes.fromhex("08000001")),
+                                     (0x20, bytes.fromhex("00000000"))):
+                    frame = recv_frame(right); seen.append(frame)
+                    right.sendall(encode_frame(1, DME_TARGET_ADDRESS, 0xF4,
+                                               bytes((0x41, base)) + bitmap))
+            worker = threading.Thread(target=stop_after_pid20); worker.start()
+            result = verify_temperature_support(path, connector_factory=lambda *_a, **_k: left)
+            worker.join(1); right.close()
+            self.assertEqual(result["requests_sent"], 2)
+            self.assertFalse(result["engine_oil_temp_pid_5c_supported"])
+            self.assertEqual([frame.payload for frame in seen], [b"\x01\x00", b"\x01\x20"])
+            self.assertEqual(left.fileno(), -1)
+
+            # Malformed, uncorrelated, and negative responses fail closed and close the client.
+            for source, payload in ((DME_TARGET_ADDRESS, b"\x41\x00\x01"),
+                                    (0x11, b"\x41\x00" + b"\0" * 4),
+                                    (DME_TARGET_ADDRESS, b"\x7f\x01\x31")):
+                left, right = socket.socketpair()
+                def invalid_peer(sock=right, response_source=source, response_payload=payload):
+                    recv_frame(sock)
+                    sock.sendall(encode_frame(1, response_source, 0xF4, response_payload))
+                worker = threading.Thread(target=invalid_peer); worker.start()
+                with self.assertRaises(TemperatureSupportError) as raised:
+                    verify_temperature_support(path, connector_factory=lambda *_a, _sock=left, **_k: _sock)
+                worker.join(1); right.close()
+                self.assertIn(raised.exception.reason, ("response-invalid", "connection-or-transport"))
+                self.assertEqual(left.fileno(), -1)
+
+            stdout = io.StringIO()
+            with patch.object(cli, "verify_temperature_support", side_effect=TemperatureSupportError("timeout")), \
+                    contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["verify-temperature-support", "--capture", str(path)]), 1)
+            result = json.loads(stdout.getvalue())
+            self.assertEqual(result, {"result": "failed", "check": "HSFZ DME temperature PID support", "reason": "timeout"})
+            self.assertEqual(set(result), {"result", "check", "reason"})
+
+            expected = {"result": "verified", "check": "HSFZ DME temperature PID support",
+                        "coolant_pid_05_supported": True, "engine_oil_temp_pid_5c_supported": False,
+                        "requests_sent": 2}
+            stdout = io.StringIO()
+            with patch.object(cli, "verify_temperature_support", return_value=expected), contextlib.redirect_stdout(stdout):
+                self.assertEqual(cli.main(["verify-temperature-support", "--capture", str(path)]), 0)
+            self.assertEqual(json.loads(stdout.getvalue()), expected)
 
     def test_doip_discovery_absolute_deadline(self):
         payload = b"V" * 17 + b"\x12\x34" + b"E" * 6 + b"G" * 6 + b"\x00"

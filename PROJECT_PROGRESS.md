@@ -10,6 +10,7 @@ This file is the cross-computer summary of verified project milestones and the n
 
 - **DONE** — supported by recorded test results or an explicitly identified user-reported vehicle result.
 - **PARTIAL** — some evidence exists, but an important part remains unverified.
+- **READY FOR CONTROLLED VEHICLE TEST** — implementation, offline checks, and review are complete; the bounded vehicle test has not yet been run.
 - **NEXT** — planned checkpoint; not yet performed.
 - **BLOCKED** — cannot proceed safely until the stated evidence or decision is available.
 
@@ -21,17 +22,17 @@ This file is the cross-computer summary of verified project milestones and the n
 | DONE | Link and HSFZ discovery | On 2026-09-26, after a clean five-minute power-down, user confirmed parked, engine off, charger connected, ENET attached, and PAD/Diagnostics Mode active. Host preflight showed adapter Up at 100 Mbps, one link-local address, and AC USB selective suspend disabled. Fresh redacted discovery found one HSFZ gateway and no DoIP. | 2026-09-26 |
 | DONE | Gateway identity routing | `verify-gateway` succeeded in the clean session with one read-only UDS 22 F190 identity request. | 2026-09-26 |
 | DONE | Engine ECU (DME) identity routing | `verify-dme` succeeded in the clean session with one read-only UDS 22 F190 identity request to candidate target 0x12. That address was community-derived before this vehicle result; this exact successful identity match now verifies the route for this vehicle. | 2026-09-26 |
-| NEXT | Supported standard PID bitmap | Implement and offline-review a bounded standard Mode 01 supported-PID bitmap check before requesting coolant PID 05 or oil PID 5C values. | — |
+| READY FOR CONTROLLED VEHICLE TEST | DME temperature support bitmap | Bounded checker implemented, independently reviewed, privacy-scanned, and passed 20 offline tests. It has not yet been run on the car. | 2026-09-26 |
 | NEXT | Coolant and oil-temperature reads | Coolant PID 05 and oil PID 5C remain candidates; ECU support and plausible returned temperature values have not been verified. | — |
 | NEXT | Conservative live-read behavior and update rate | No live polling or vehicle update-rate measurement has been validated. | — |
 
 ## Current safe checkpoint
 
-On 2026-09-26, following a clean five-minute power-down, the user confirmed the vehicle was parked with engine off, charger connected, ENET attached, and PAD/Diagnostics Mode active. Host preflight confirmed the Ethernet adapter Up at 100 Mbps, exactly one link-local address, and AC USB selective suspend disabled. Fresh redacted discovery found one HSFZ gateway and no DoIP. The source-bound TCP connection-only check to the captured peer on port 6801 succeeded without diagnostic payload. `verify-gateway` succeeded with one read-only UDS 22 F190 identity request, and `verify-dme` succeeded with one read-only UDS 22 F190 request to candidate target 0x12. The 0x12 address had been community-derived before this exact successful vehicle result, which verifies DME identity routing on this car. No writes, session changes, tester-present messages, fault clears, routines, polling, or temperature requests were sent. Earlier failed connection and DME attempts remain historical evidence only; the clean-session results establish the route. Supported standard PIDs, actual coolant/oil values, and a safe polling interval remain unknown. The oil-temperature decoder is implemented and its profile entry remains disabled/unverified.
+On 2026-09-26, following a clean five-minute power-down, the user confirmed the vehicle was parked with engine off, charger connected, ENET attached, and PAD/Diagnostics Mode active. Host preflight confirmed the Ethernet adapter Up at 100 Mbps, exactly one link-local address, and AC USB selective suspend disabled. Fresh redacted discovery found one HSFZ gateway and no DoIP. The source-bound TCP connection-only check to the captured peer on port 6801 succeeded without diagnostic payload. `verify-gateway` succeeded with one read-only UDS 22 F190 identity request, and `verify-dme` succeeded with one read-only UDS 22 F190 request to candidate target 0x12. The 0x12 address had been community-derived before this exact successful vehicle result, which verifies DME identity routing on this car. The bounded DME temperature support bitmap checker is implemented, independently reviewed, privacy-scanned, and passed 20 offline tests; it is ready for a controlled vehicle test but has not been run on the car. No writes, vehicle-state changes, session changes, tester-present messages, fault clears, routines, polling, or temperature requests have been sent. Earlier failed connection and DME attempts remain historical evidence only; the clean-session results establish the route. Supported standard PIDs, actual coolant/oil values, and a safe polling interval remain unknown. The oil-temperature decoder is implemented and its profile entry remains disabled/unverified.
 
 ## Next action
 
-Implement and offline-review a bounded standard Mode 01 supported-PID bitmap check. Only after review should it be run as the next read-only checkpoint. Use the verified DME route; do not request PID 05 or PID 5C values until the bitmap check establishes support. No live polling or temperature request has yet been validated.
+Reconnect the Realtek ENET adapter on the machine running this task. Confirm the vehicle is parked, engine off, charger connected, and PAD/Diagnostics Mode active. Then run one fresh redacted discovery and exactly one `verify-temperature-support` command. Stop afterward and review the categorized result before deciding on any next step. This checker determines supported PID bitmap information only; it does not request coolant PID 05 or oil PID 5C values.
 
 ## Blockers and unknowns
 
@@ -39,8 +40,11 @@ Implement and offline-review a bounded standard Mode 01 supported-PID bitmap che
 - Support and actual values for coolant PID 05 and oil-temperature PID 5C are unknown on this vehicle.
 - Session requirements beyond the tested PAD state, battery-support duration, supported PID bitmap, request limits, and live update rate remain unverified.
 - No DoIP announcement was seen in the fresh discovery; DoIP routing is not implemented.
+- The supported-PID bitmap check has not yet been run on the car. No live polling or temperature-value request has been validated.
 
 The successful identity checks each sent one read-only 22 F190 request. No writes, session changes, tester-present, clears, routines, polling, or temperature requests were sent.
+
+Vehicle safety constraint: never write to the vehicle or otherwise change vehicle state through this project. Keep all vehicle communication read-only.
 
 ## Privacy rule
 

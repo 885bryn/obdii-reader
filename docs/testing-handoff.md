@@ -85,6 +85,14 @@ python -m supra_telemetry verify-dme --capture captures/discovery.json
 
 It binds to the capture's exact local IPv4 link-local address and sends exactly one UDS VIN request (22 F190) to candidate DME target 0x12 at the captured peer on TCP 6801, using tester address F4. Target 0x12 and tester F4 are community-corroborated conventions; Toyota has not published them for this vehicle. Failure output includes only a fixed generic reason category; no exchange is saved. Success verifies only DME identity routing. It does not establish supported PIDs or coolant/oil temperature availability. It does not scan, retry, start a diagnostic session, send tester-present, or read live signals.
 
+After the DME identity route has been verified, the bounded standard PID-support check is:
+
+```powershell
+python -m supra_telemetry verify-temperature-support --capture captures/discovery.json
+```
+
+It binds TCP to the capture's exact local interface address and uses the fixed candidate DME target 0x12 and tester F4. It reads SAE J1979 Mode 01 support bitmaps: PID 00 always, PID 20 only if PID 00 advertises continuation, and PID 40 only if PID 20 advertises continuation. It sends at most three requests on one client and stops on any error. It never requests PID 05 or PID 5C values. Output contains support booleans for coolant PID 05 and oil-temperature PID 5C plus request count, or a fixed generic failure reason. A support bit advertises ECU support according to the standard bitmap; it does not prove that a future value response is plausible, correctly scaled, or safe to poll.
+
 The capture may contain the VIN, MAC, EID, GID, IP address, or other vehicle identifiers. `captures/` is ignored by Git. Do not commit, publish, paste publicly, or attach an unredacted capture.
 
 ## 6. Continue in Codex

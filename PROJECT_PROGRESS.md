@@ -1,6 +1,6 @@
 # Project progress
 
-Last updated: 2026-09-24
+Last updated: 2026-09-26
 
 ## Source of truth
 
@@ -18,27 +18,29 @@ This file is the cross-computer summary of verified project milestones and the n
 | Status | Milestone | Evidence / boundary | Completed |
 | --- | --- | --- | --- |
 | DONE | Offline protocol and safety tests | 19 offline unit tests passed; software fixtures only, no car traffic. | 2026-09-24 |
-| DONE | Link and HSFZ discovery | One HSFZ vehicle-identification response observed while stationary with engine off; no DoIP announcement in that attempt. | 2026-09-24 |
-| DONE | Gateway identity routing | User reported `verify-gateway` succeeded. The check performs one read-only VIN identity request and verifies a match; no signals were queried. | 2026-09-24 |
-| PARTIAL | Engine ECU (DME) identity routing | The privacy-safe categorized command passed 19 offline tests and independent review, clearing the review blocker. Next checkpoint: one deliberate single-request vehicle attempt. Two earlier attempts remain indeterminate: the adapter/interface was absent when checked after each command, so neither establishes DME acceptance or rejection. AC-only USB selective-suspend mitigation was followed by a 45-second stable-Up monitor and successful fresh redacted discovery/current-interface match. | — |
-| NEXT | Supported coolant and oil-temperature reads | Coolant PID 05 and oil-temperature PID 5C are candidates only. No ECU support, returned value, or plausibility has been verified on this car. | — |
+| DONE | Link and HSFZ discovery | On 2026-09-26, after a clean five-minute power-down, user confirmed parked, engine off, charger connected, ENET attached, and PAD/Diagnostics Mode active. Host preflight showed adapter Up at 100 Mbps, one link-local address, and AC USB selective suspend disabled. Fresh redacted discovery found one HSFZ gateway and no DoIP. | 2026-09-26 |
+| DONE | Gateway identity routing | `verify-gateway` succeeded in the clean session with one read-only UDS 22 F190 identity request. | 2026-09-26 |
+| DONE | Engine ECU (DME) identity routing | `verify-dme` succeeded in the clean session with one read-only UDS 22 F190 identity request to candidate target 0x12. That address was community-derived before this vehicle result; this exact successful identity match now verifies the route for this vehicle. | 2026-09-26 |
+| NEXT | Supported standard PID bitmap | Implement and offline-review a bounded standard Mode 01 supported-PID bitmap check before requesting coolant PID 05 or oil PID 5C values. | — |
+| NEXT | Coolant and oil-temperature reads | Coolant PID 05 and oil PID 5C remain candidates; ECU support and plausible returned temperature values have not been verified. | — |
 | NEXT | Conservative live-read behavior and update rate | No live polling or vehicle update-rate measurement has been validated. | — |
 
 ## Current safe checkpoint
 
-Gateway HSFZ identity routing has been reported successful. The privacy-safe categorized DME command passed 19 offline tests and independent review, clearing the review blocker. Two earlier `verify-dme` attempts returned generic failures; the adapter/interface was checked only afterward and found absent, so whether either request sent diagnostic bytes before disconnect is indeterminate. Neither result establishes DME acceptance or rejection. As a reversible mitigation, USB selective suspend was disabled for AC power. Afterward, the adapter stayed Up during a 45-second monitor, and a fresh redacted discovery succeeded with the current capture/interface matching on an elevated read-only check. The next checkpoint is one deliberate single-request DME attempt using the reviewed categorized command. A `connection-or-transport` result cannot distinguish a pre-send failure from a disconnect after sending; record transmission as indeterminate unless separate evidence proves otherwise. Supported PIDs, temperature readings, and a safe polling interval remain unverified. The oil-temperature decoder is implemented and its profile entry remains disabled/unverified.
+On 2026-09-26, following a clean five-minute power-down, the user confirmed the vehicle was parked with engine off, charger connected, ENET attached, and PAD/Diagnostics Mode active. Host preflight confirmed the Ethernet adapter Up at 100 Mbps, exactly one link-local address, and AC USB selective suspend disabled. Fresh redacted discovery found one HSFZ gateway and no DoIP. The source-bound TCP connection-only check to the captured peer on port 6801 succeeded without diagnostic payload. `verify-gateway` succeeded with one read-only UDS 22 F190 identity request, and `verify-dme` succeeded with one read-only UDS 22 F190 request to candidate target 0x12. The 0x12 address had been community-derived before this exact successful vehicle result, which verifies DME identity routing on this car. No writes, session changes, tester-present messages, fault clears, routines, polling, or temperature requests were sent. Earlier failed connection and DME attempts remain historical evidence only; the clean-session results establish the route. Supported standard PIDs, actual coolant/oil values, and a safe polling interval remain unknown. The oil-temperature decoder is implemented and its profile entry remains disabled/unverified.
 
 ## Next action
 
-With the privacy-safe categorized command's 19 offline tests and independent review passed, make one deliberate single-request vehicle attempt under the documented stationary setup. Record only its categorized outcome and whether transmission is known or indeterminate; `connection-or-transport` alone cannot tell whether the request was sent before a disconnect. The target address remains unverified on this vehicle, so do not copy it into a live profile unless routing is established. After routing is established, query standard PID support before requesting coolant or oil temperature, then validate returned values while stationary.
+Implement and offline-review a bounded standard Mode 01 supported-PID bitmap check. Only after review should it be run as the next read-only checkpoint. Use the verified DME route; do not request PID 05 or PID 5C values until the bitmap check establishes support. No live polling or temperature request has yet been validated.
 
 ## Blockers and unknowns
 
-- Toyota-published HSFZ tester/target addressing and the Supra engine ECU address are not available in the tracked evidence.
-- Two earlier DME CLI attempts returned generic failures; adapter/interface absence was observed only after each command, leaving request-byte transmission indeterminate for both. Neither establishes acceptance or rejection. AC USB selective-suspend mitigation improved observed stability (Up for 45 seconds) and fresh discovery/current-interface matching succeeded. The categorized command's review blocker is cleared; the remaining checkpoint is one deliberate single-request vehicle attempt. A `connection-or-transport` result is transmission-indeterminate unless separate evidence proves pre-send failure or successful transmission.
+- Toyota has not published the Supra's HSFZ addressing in the tracked evidence. Candidate DME target 0x12 was community-derived before the successful clean-session identity result; `verify-dme` success now establishes identity routing to that target on this vehicle.
 - Support and actual values for coolant PID 05 and oil-temperature PID 5C are unknown on this vehicle.
-- Session requirements, battery-support duration, request limits, and live update rate remain unverified.
-- The observed discovery had no DoIP announcement; DoIP routing is not implemented.
+- Session requirements beyond the tested PAD state, battery-support duration, supported PID bitmap, request limits, and live update rate remain unverified.
+- No DoIP announcement was seen in the fresh discovery; DoIP routing is not implemented.
+
+The successful identity checks each sent one read-only 22 F190 request. No writes, session changes, tester-present, clears, routines, polling, or temperature requests were sent.
 
 ## Privacy rule
 

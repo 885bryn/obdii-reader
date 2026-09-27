@@ -101,6 +101,14 @@ python -m supra_telemetry verify-common-dme-support --capture captures/discovery
 
 It uses the same source-bound, previously verified DME route and sends exactly one `01 00` bitmap request. It reports whether the DME advertises RPM PID 0C, vehicle speed PID 0D, intake-air-temperature PID 0F, and throttle-position PID 11, plus a conservative request count. It never requests those values, retries, scans, polls, changes session, sends tester-present, writes, actuates, or persists the exchange. The implementation passed 42 offline tests and independent review. On 2026-09-27, the command ran once on the stationary vehicle with the engine off and PAD/Diagnostic Mode off; its single reported request advertised all four candidate PIDs and exited successfully. This establishes support bits only, not plausible values or safe polling. Do not repeat it merely to reconfirm the result. The next vehicle action must wait for a separately implemented and reviewed bounded value-read procedure.
 
+That next information-gathering procedure is now offline-implemented as:
+
+```powershell
+python -m supra_telemetry collect-read-only-suite --capture captures/discovery.json
+```
+
+Run it only once with the car stationary outdoors, parking brake set, transmission in Park, engine running normally at idle without throttle input, PAD/Diagnostic Mode off, and all other diagnostic tools closed. The controller source-binds every phase and stops all later phases after the first error. Its exact ceiling is 20 requests: up to eight conditional Mode 01 support bitmaps, four one-shot common values, three emissions-DTC reads, and up to five privacy-redacted Mode 09 information requests. The fresh inventory must advertise all four value PIDs, and the value phase must report 300–2500 rpm, exactly 0 km/h, intake-air temperature from −40 to 120 °C, and throttle from 0–100% before later phases are allowed. It pauses two seconds between successful phases so the user can react to a vehicle warning. There are no retries, scans, polling, session changes, clears, controls, writes, or raw persistence. Stop immediately with `Ctrl+C` on any vehicle warning or unexpected behavior. The full suite and its stationary value plausibility remain unverified on the vehicle until that bounded run completes; success does not authorize repeated monitoring.
+
 The already completed temperature support check verified both temperature PIDs on this vehicle, so its separate optional value check is available as:
 
 ```powershell

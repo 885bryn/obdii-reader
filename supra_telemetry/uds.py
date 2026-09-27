@@ -30,7 +30,8 @@ def parse_response(payload: bytes, request_service: int) -> ParsedResponse:
         if payload[1] != request_service:
             raise ValueError("negative response references a different service")
         return ParsedResponse(False, request_service, nrc=payload[2], pending=payload[2] == 0x78)
-    expected = {0x01: 0x41, 0x09: 0x49, 0x22: 0x62, 0x3E: 0x7E}.get(request_service)
+    expected = {0x01: 0x41, 0x03: 0x43, 0x07: 0x47, 0x09: 0x49,
+                0x0A: 0x4A, 0x22: 0x62, 0x3E: 0x7E}.get(request_service)
     if expected is None or not payload or payload[0] != expected:
         raise ValueError("unexpected positive response service")
     return ParsedResponse(True, request_service, payload[1:])

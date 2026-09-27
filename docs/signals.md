@@ -2,12 +2,12 @@
 
 | Signal | Current status | Source / formula | Rate |
 |---|---|---|---|
-| Engine RPM | Vehicle support bitmap verified; value unverified | SAE Mode 01 PID 0x0C, raw/4 rpm | Demo 2 Hz; live unknown |
-| Vehicle speed | Vehicle support bitmap verified; value unverified | SAE Mode 01 PID 0x0D, raw km/h | Demo 2 Hz; live unknown |
+| Engine RPM | Vehicle support bitmap and offline one-shot reader verified; value unverified | SAE Mode 01 PID 0x0C, raw/4 rpm | Demo 2 Hz; live unknown |
+| Vehicle speed | Vehicle support bitmap and offline one-shot reader verified; value unverified | SAE Mode 01 PID 0x0D, raw km/h | Demo 2 Hz; live unknown |
 | Coolant temperature | One-shot and one bounded 300-second monitor verified | SAE J1979 Mode 01 PID 0x05, raw−40 °C | Observed about 0.49–0.50 completed pairs/s in the bounded monitor; at least 2-second gap between cycles |
 | Engine oil temperature | One-shot and one bounded 300-second monitor verified; absent from demo | SAE J1979 Mode 01 PID 0x5C, raw−40 °C | Observed about 0.49–0.50 completed pairs/s in the bounded monitor; at least 2-second gap between cycles |
-| Intake-air temperature | Vehicle support bitmap verified; value unverified | SAE Mode 01 PID 0x0F, raw−40 °C | Live unknown |
-| Throttle position | Vehicle support bitmap verified; value unverified | SAE Mode 01 PID 0x11, raw×100/255 % | Live unknown |
+| Intake-air temperature | Vehicle support bitmap and offline one-shot reader verified; value unverified | SAE Mode 01 PID 0x0F, raw−40 °C | Live unknown |
+| Throttle position | Vehicle support bitmap and offline one-shot reader verified; value unverified | SAE Mode 01 PID 0x11, raw×100/255 % | Live unknown |
 | Boost | Demo derived | Synthetic mock formula only; not vehicle data | Demo 2 Hz |
 | Gear | Unavailable | No verified source configured | None |
 | Accelerator, wheel speeds, steering, brakes, acceleration, transmission | Unverified / unsupported | Requires evidence-backed vehicle-specific support; no DIDs invented | Unknown |

@@ -15,9 +15,23 @@ from .temperature_support import (FAILURE_REASONS as TEMPERATURE_FAILURE_REASONS
 from .common_dme_support import (CHECK_NAME as COMMON_DME_SUPPORT_CHECK,
                                  FAILURE_REASONS as COMMON_DME_SUPPORT_FAILURE_REASONS,
                                  CommonDmeSupportError, verify_common_dme_support)
+from .common_dme_values import (CHECK_NAME as COMMON_DME_VALUES_CHECK,
+                                FAILURE_REASONS as COMMON_DME_VALUES_FAILURE_REASONS,
+                                CommonDmeValuesError, read_common_dme_values)
+from .emissions_dtcs import (CHECK_NAME as EMISSIONS_DTCS_CHECK,
+                             FAILURE_REASONS as EMISSIONS_DTCS_FAILURE_REASONS,
+                             EmissionsDtcError, read_emissions_dtcs)
+from .mode01_inventory import (CHECK_NAME as MODE01_INVENTORY_CHECK,
+                               FAILURE_REASONS as MODE01_INVENTORY_FAILURE_REASONS,
+                               Mode01InventoryError, inventory_mode01)
+from .read_only_suite import (CHECK_NAME as READ_ONLY_SUITE_CHECK,
+                              SuiteError, run_read_only_suite)
 from .temperature_values import (CHECK_NAME as TEMPERATURE_VALUES_CHECK,
                                  FAILURE_REASONS as TEMPERATURE_VALUES_FAILURE_REASONS,
                                  TemperatureValueError, read_temperature_values)
+from .vehicle_info import (CHECK_NAME as VEHICLE_INFO_CHECK,
+                           FAILURE_REASONS as VEHICLE_INFO_FAILURE_REASONS,
+                           VehicleInfoError, verify_vehicle_info)
 from .live import HsfzSignalSource
 from .models import SignalDefinition, utc_now
 from .profiles import load_profile
@@ -121,6 +135,21 @@ def main(argv=None):
     common_support = sub.add_parser("verify-common-dme-support", help="one bounded SAE Mode 01 common-signal support check")
     common_support.add_argument("--capture", required=True, help="private JSON file created by discover")
     common_support.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    mode01_inventory = sub.add_parser("inventory-mode01-support", help="bounded standardized Mode 01 PID support inventory")
+    mode01_inventory.add_argument("--capture", required=True, help="private JSON file created by discover")
+    mode01_inventory.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    common_values = sub.add_parser("read-common-dme-values", help="one-shot RPM, speed, intake-temperature, and throttle reads")
+    common_values.add_argument("--capture", required=True, help="private JSON file created by discover")
+    common_values.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    emissions_dtcs = sub.add_parser("read-emissions-dtcs", help="bounded stored, pending, and permanent emissions DTC reads")
+    emissions_dtcs.add_argument("--capture", required=True, help="private JSON file created by discover")
+    emissions_dtcs.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    vehicle_info = sub.add_parser("verify-vehicle-info", help="bounded privacy-safe Mode 09 information check")
+    vehicle_info.add_argument("--capture", required=True, help="private JSON file created by discover")
+    vehicle_info.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    read_only_suite = sub.add_parser("collect-read-only-suite", help="run the four bounded discovery phases with stop gates")
+    read_only_suite.add_argument("--capture", required=True, help="private JSON file created by discover")
+    read_only_suite.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout per request (0.1 to 5 seconds)")
     temp_values = sub.add_parser("read-temperature-values", help="one-shot coolant and oil temperature reads")
     temp_values.add_argument("--capture", required=True, help="private JSON file created by discover")
     temp_values.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
@@ -197,6 +226,86 @@ def main(argv=None):
                               "intake_air_temp_pid_0f_supported": None,
                               "throttle_position_pid_11_supported": None,
                               "requests_sent": 0, "reason": "unexpected-error"}))
+            return 1
+        print(json.dumps(result))
+        return 0
+    if args.command == "inventory-mode01-support":
+        try:
+            result = inventory_mode01(args.capture, args.timeout)
+        except Mode01InventoryError as exc:
+            reason = exc.reason if exc.reason in MODE01_INVENTORY_FAILURE_REASONS else "unexpected-error"
+            print(json.dumps({"result": "failed", "check": MODE01_INVENTORY_CHECK,
+                              "supported_pids": None, "highest_bitmap_base": None,
+                              "requests_sent": exc.requests_sent, "reason": reason}))
+            return 1
+        except Exception:
+            print(json.dumps({"result": "failed", "check": MODE01_INVENTORY_CHECK,
+                              "supported_pids": None, "highest_bitmap_base": None,
+                              "requests_sent": 0, "reason": "unexpected-error"}))
+            return 1
+        print(json.dumps(result))
+        return 0
+    if args.command == "read-common-dme-values":
+        try:
+            result = read_common_dme_values(args.capture, args.timeout)
+        except CommonDmeValuesError as exc:
+            reason = exc.reason if exc.reason in COMMON_DME_VALUES_FAILURE_REASONS else "unexpected-error"
+            print(json.dumps({"result": "failed", "check": COMMON_DME_VALUES_CHECK,
+                              "values": None, "requests_sent": exc.requests_sent,
+                              "reason": reason}))
+            return 1
+        except Exception:
+            print(json.dumps({"result": "failed", "check": COMMON_DME_VALUES_CHECK,
+                              "values": None, "requests_sent": 0,
+                              "reason": "unexpected-error"}))
+            return 1
+        print(json.dumps(result))
+        return 0
+    if args.command == "read-emissions-dtcs":
+        try:
+            result = read_emissions_dtcs(args.capture, args.timeout)
+        except EmissionsDtcError as exc:
+            reason = exc.reason if exc.reason in EMISSIONS_DTCS_FAILURE_REASONS else "unexpected-error"
+            print(json.dumps({"result": "failed", "check": EMISSIONS_DTCS_CHECK,
+                              "stored_dtcs": None, "pending_dtcs": None,
+                              "permanent_dtcs": None, "requests_sent": exc.requests_sent,
+                              "reason": reason}))
+            return 1
+        except Exception:
+            print(json.dumps({"result": "failed", "check": EMISSIONS_DTCS_CHECK,
+                              "stored_dtcs": None, "pending_dtcs": None,
+                              "permanent_dtcs": None, "requests_sent": 0,
+                              "reason": "unexpected-error"}))
+            return 1
+        print(json.dumps(result))
+        return 0
+    if args.command == "verify-vehicle-info":
+        try:
+            result = verify_vehicle_info(args.capture, args.timeout)
+        except VehicleInfoError as exc:
+            reason = exc.reason if exc.reason in VEHICLE_INFO_FAILURE_REASONS else "unexpected-error"
+            print(json.dumps({"result": "failed", "check": VEHICLE_INFO_CHECK,
+                              "requests_sent": exc.requests_sent, "reason": reason}))
+            return 1
+        except Exception:
+            print(json.dumps({"result": "failed", "check": VEHICLE_INFO_CHECK,
+                              "requests_sent": 0, "reason": "unexpected-error"}))
+            return 1
+        print(json.dumps(result))
+        return 0
+    if args.command == "collect-read-only-suite":
+        try:
+            result = run_read_only_suite(args.capture, args.timeout)
+        except SuiteError as exc:
+            print(json.dumps({"result": "failed", "check": READ_ONLY_SUITE_CHECK,
+                              "failed_phase": exc.phase, "reason": exc.reason,
+                              "completed_phases": list(exc.completed_phases),
+                              "total_requests": exc.total_requests}))
+            return 1
+        except Exception:
+            print(json.dumps({"result": "failed", "check": READ_ONLY_SUITE_CHECK,
+                              "failed_phase": "suite", "reason": "unexpected-error",
+                              "completed_phases": [], "total_requests": 0}))
             return 1
         print(json.dumps(result))
         return 0

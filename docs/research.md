@@ -6,6 +6,8 @@
 - DoIP discovery framing follows ISO 13400's generic header structure; DoIP discovery does not establish a diagnostic route.
 - HSFZ framing/control words and UDP 6811 identification request are implemented from community protocol research; packet fixtures test the software's encoding/parsing. These are not Toyota/OEM specifications and do not validate behavior on a Supra.
 - DoIP discovery announcement parsing accepts protocol versions 0x02/0x03 with matching inverse byte, validates the ISO 13400 field structure/payload length, and uses one absolute deadline. It does not establish a diagnostic route.
+- The offline-tested read-only discovery suite uses only the verified capture-bound DME route. Its fixed phases are capped at 8 conditional Mode 01 bitmap reads, 4 common-value reads, 3 emissions-DTC reads, and 5 Mode 09 requests, with a total ceiling of 20 and stop-on-first-failure behavior. This is software verification, not vehicle evidence.
+- SAE J1979 and official CARB material identify Mode 03/07/0A as confirmed, pending, and permanent emissions-DTC reads; Mode 04 is clear/reset and remains prohibited. CARB material identifies Mode 09 InfoTypes 02, 04, 06, and 0A as VIN, calibration ID, CVN, and ECU name. The public sources establish standardized meanings, not support on this vehicle or proprietary ECU topology.
 
 ## Verified by vehicle testing
 
@@ -30,6 +32,7 @@
 - Behavior beyond the single 300-second monitor run and monitor behavior with recording enabled.
 - DME session requirements, battery-support limits, vehicle request limits beyond the observed bounded cadence, and HSFZ keep-alive requirements.
 - Value responses, stationary plausibility, and safe acquisition cadence for the support-advertised PIDs `0C`, `0D`, `0F`, and `11`; transmission/chassis signals remain unverified.
+- Vehicle behavior for the extended Mode 01 support inventory, Mode 03/07/0A DTC reads, and privacy-redacted Mode 09 information check.
 - DoIP routing and support. The bounded discovery attempt saw no DoIP announcement, and live DoIP routing is not implemented.
 
 ## References
@@ -50,7 +53,11 @@ The optional `verify-dme` check makes a distinct single VIN read through candida
 - **Standards implementer overview:** UDS background, Vector: https://www.vector.com/int/en/know-how/protocols/diagnostic-protocols/uds/
 - Python socket documentation: https://docs.python.org/3/library/socket.html
 - Python sqlite3 documentation: https://docs.python.org/3/library/sqlite3.html
-- SAE J1979 standards landing page: https://www.sae.org/standards/content/j1979_202202/
+- SAE J1979 diagnostic test modes (official SAE scope and revision history): https://saemobilus.sae.org/standards/j1979_199709-e-e-diagnostic-test-modes
+- ISO 15031-5 road-vehicle diagnostic services (official ISO scope): https://www.iso.org/standard/66368.html
+- California BAR OBD inspection data-acquisition specification (official Mode 03/07/0A and Mode 09 acquisition requirements): https://bar.ca.gov/pdf/publications/DAD-2012.pdf
+- CARB remote OBD specification mapping standardized DTC and Mode 09 information requests: https://ww2.arb.ca.gov/sites/default/files/classic/msprog/hdim/meetings/20201116_hdim_workgroup_robd_spec.pdf
+- Toyota owner information on OBD data and software identifiers: https://www.toyota.com/owners/iumpr/
 
 These references provide protocol background only. Community HSFZ reports should be treated as provisional until independently corroborated. Toyota documentation confirms a Supra-specific diagnostic cable and Toyota ISTA requirement, not raw ENET host configuration, HSFZ addressing, ECU DIDs, or signal availability. The initial vehicle capture confirms only the bounded HSFZ identification exchange described above.
 

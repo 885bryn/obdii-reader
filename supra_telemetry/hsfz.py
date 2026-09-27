@@ -174,7 +174,7 @@ class HsfzClient:
 
     def request(self, payload: bytes) -> bytes:
         authorized = self.policy.authorize(payload)
-        if authorized.service not in (0x01, 0x09, 0x22):
+        if authorized.service not in (0x01, 0x03, 0x07, 0x09, 0x0A, 0x22):
             raise ValueError("only explicitly requested data reads are supported by HSFZ client")
         with self._lock:
             if self._closed: raise ConnectionError("HSFZ client is closed")

@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "implementation",
+  "workflow_stage": "vehicle_validation",
   "health": "healthy",
-  "updated_at": "2026-09-27T16:27:35-07:00",
+  "updated_at": "2026-09-27T16:51:57-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,10 +23,10 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-2",
-      "title": "Add bounded common DME one-shot value reads",
-      "status": "planned",
-      "path": "docs/roadmap.md"
+      "id": "T009-3",
+      "title": "Run bounded DME read-only discovery suite",
+      "status": "ready",
+      "path": "supra_telemetry/read_only_suite.py"
     }
   },
   "latest_accomplishment": {
@@ -39,31 +39,31 @@
     ]
   },
   "next_action": {
-    "summary": "Implement and independently review a bounded, fail-closed one-shot value-read path for the four now-advertised common DME PIDs. Do not send those value requests to the vehicle until their exact request, response validation, limits, and stationary plausibility procedure have been separately reviewed.",
-    "owner": "agent",
-    "reference": "docs/roadmap.md"
+    "summary": "With the vehicle stationary outdoors, parking brake set, transmission in Park, engine idling without throttle input, PAD/Diagnostic Mode off, stable ENET, and no warnings, run the reviewed collect-read-only-suite command once. Stop immediately on any warning or failed phase and do not retry.",
+    "owner": "user",
+    "reference": "docs/safety.md"
   },
   "attention": [],
   "architecture": {
     "status": "aligned",
-    "summary": "The implementation remains strictly read-only, fail-closed, source-bound to the private discovery capture, and limited to explicitly verified routes and signals. Diagnostic/PAD Mode may support bounded research, while end-product acceptance requires normal-mode verification.",
+    "summary": "The reviewed suite remains strictly read-only, fail-closed, source-bound to the private discovery capture, and limited to the verified DME route and standardized requests. It rechecks support, applies stationary plausibility gates, stops later phases on first failure, and never exposes a raw request surface.",
     "reference": "docs/architecture.md"
   },
   "verification": {
     "status": "passed",
-    "summary": "The one-request common-DME support checker had already passed 3 focused tests and the full 42-test offline suite. Its first bounded vehicle run then succeeded with exactly one reported request and all four candidate support bits advertised. Value behavior and repeated acquisition remain unverified.",
-    "verified_at": "2026-09-27T16:27:00-07:00"
+    "summary": "All 71 offline tests pass. They cover exact request order and ceilings, source binding, response parsing, privacy redaction, prohibited clear/control services, fresh support and stationary plausibility gates, two-second warning windows, and stop-on-first-failure behavior. The new vehicle responses remain unverified.",
+    "verified_at": "2026-09-27T16:50:00-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent review approved the one-request support checker with no substantive findings; review confirmed source binding, exact request scope, redacted failure output, cleanup, and no retry, scan, persistence, or write path."
+    "summary": "Independent medium review approved the final bounded suite for its first vehicle run after support-first and stationary plausibility gates were added. No remaining substantive blocker was found."
   },
   "integration": {
     "status": "synchronized",
-    "summary": "The verified common-DME support result and reconciled operational records are synchronized on main without private vehicle or network identifiers."
+    "summary": "The offline-verified discovery suite, reviewed safety procedure, and reconciled operational records are synchronized on main without private vehicle or network identifiers."
   },
   "handoff": {
-    "summary": "M009's support-only checker is implemented, offline-verified, independently reviewed, and vehicle-verified in one stationary engine-off/PAD-off run. The DME advertised all four candidate PIDs. Next add bounded value reads, then verify plausibility while stationary before considering repeated monitoring. M010 fault diagnostics and M011 vehicle information remain next in order."
+    "summary": "The DME advertised all four first-batch common PIDs. A single reviewed suite now combines conditional standard PID inventory, four one-shot values, selective emissions-DTC reads, and privacy-redacted Mode 09 availability with a 20-request ceiling. It is offline-verified and approved but has not run on the vehicle. Repeated monitoring and recording remain gated on the suite result."
   }
 }
 ---

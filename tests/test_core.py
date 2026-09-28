@@ -15,7 +15,9 @@ from pathlib import Path
 
 from supra_telemetry.safety import SafetyPolicy, UnsafeRequest
 from supra_telemetry.uds import parse_response, mode01_value
-from supra_telemetry.hsfz import encode_frame, recv_frame, parse_frame, parse_discovery_response, HsfzClient, discover as hsfz_discover
+from supra_telemetry.hsfz import (MalformedUdsResponse, encode_frame, recv_frame,
+                                  parse_frame, parse_discovery_response, HsfzClient,
+                                  discover as hsfz_discover)
 from supra_telemetry.doip import encode_message, parse_message, VEHICLE_ANNOUNCEMENT, parse_announcement
 from supra_telemetry import doip
 from supra_telemetry.models import SignalDefinition, decode_integer, utc_now
@@ -376,6 +378,10 @@ class CoreTests(unittest.TestCase):
         self.assertIn(b"ident123", audits[0].response)
         _, _, pending_audit = exchange([encode_frame(1, 0x10, 0xF4, b"\x7f\x01\x78"), positive])
         self.assertEqual(pending_audit[0].outcome, "ok")
+        malformed_pending = encode_frame(1, 0x10, 0xF4, b"\x7f\x01\x78\x00")
+        with self.assertRaises(MalformedUdsResponse) as malformed:
+            exchange([malformed_pending])
+        self.assertEqual(str(malformed.exception), "malformed UDS negative response")
         bad_result = encode_frame(1, 0x10, 0xF5, b"\x41\x0c\x1a\x2c")
         s1, s2 = socket.socketpair()
         def wrong_gateway():

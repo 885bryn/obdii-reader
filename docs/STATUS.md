@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "vehicle_validation",
+  "workflow_stage": "offline_hardening",
   "health": "healthy",
-  "updated_at": "2026-09-27T17:35:43-07:00",
+  "updated_at": "2026-09-27T17:53:25-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,50 +23,50 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T010-2",
-      "title": "Run repaired suite and bounded recorded monitor in one session",
+      "id": "T010-3",
+      "title": "Prepare bounded PAD-on DTC comparison",
       "status": "ready",
       "path": "docs/safety.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "Offline investigation produced a strict count-prefixed DTC parser, privacy-safe partial-result preservation, and a bounded four-signal stationary monitor with decoded-only recording and CSV coverage. All 94 offline tests pass, and independent medium re-review approved offline integration after two blocking edge cases were repaired.",
-    "at": "2026-09-27T17:31:00-07:00",
+    "summary": "A second normal-mode suite run verified strict count-prefixed stored and pending DTC reads, reporting no stored code and pending P0420, then stopped safely when the permanent read was rejected after 13 requests. Offline rejection evidence was hardened with fixed privacy-safe categories; all 98 tests pass and independent medium re-review approved the repair.",
+    "at": "2026-09-27T17:53:25-07:00",
     "evidence": [
       "docs/PROJECT_HISTORY.md",
       "tests/test_emissions_dtcs.py",
-      "tests/test_common_dme_monitor.py"
+      "tests/test_core.py"
     ]
   },
   "next_action": {
-    "summary": "At the next convenient vehicle visit, follow the reviewed consolidated normal-mode procedure: run the repaired 20-request-maximum suite once; only after full success, run the 60-second, 60-request-maximum recorded common-DME monitor once; disconnect before CSV export. Stop all traffic on the first warning or failure. PAD Mode is not part of this session.",
-    "owner": "user",
+    "summary": "Finish privacy checking, commit, and synchronization of the reviewed second-run records and rejection-evidence repair; then continue offline with a minimal manually entered PAD/Diagnostic Mode DTC comparison. No vehicle command is currently approved.",
+    "owner": "agent",
     "reference": "docs/safety.md"
   },
   "attention": [
-    "The original failed run retained no raw DTC response or failing read label. Count-prefixed framing is evidence-based and strict but remains a vehicle-unverified hypothesis.",
-    "Mode 09, common-DME repeated acquisition, SQLite recording, and CSV content remain vehicle-unverified until the consolidated session succeeds."
+    "The second run verified count-prefixed parsing only for stored and pending reads. Its pre-subtype build retained no safe category for the permanent-read rejection, so the rejection cause remains unknown.",
+    "P0420 was observed once as pending only, not stored or permanent. Mode 09, common-DME repeated acquisition, SQLite recording, and CSV content remain vehicle-unverified."
   ],
   "architecture": {
     "status": "aligned",
-    "summary": "The repaired suite and monitor remain strictly read-only, source-bound, bounded, serialized, privacy-safe, and fail-closed. Explicit DTC framing prevents ambiguous decoding; monitor deadlines, request gates, stationary checks, and recording failures prevent later traffic.",
+    "summary": "The suite and monitor remain strictly read-only, source-bound, bounded, serialized, privacy-safe, and fail-closed. DTC negatives require exact shape and service correlation; only allowlisted rejection categories propagate, while malformed pending responses and all acquisition errors stop later traffic.",
     "reference": "docs/architecture.md"
   },
   "verification": {
     "status": "passed",
-    "summary": "All 94 offline tests pass. Coverage includes strict count-prefixed DTC parsing, truncated and padding failures, malicious-output redaction, safe completed summaries, fixed request order and ceilings, one-second cadence, duration races, stationary gates, loopback binding, SQLite/CSV decoded-only persistence, recording-error redaction, and unchanged temperature-monitor defaults.",
-    "verified_at": "2026-09-27T17:31:00-07:00"
+    "summary": "All 98 offline tests pass. Coverage includes strict count-prefixed DTC parsing, exact and malformed negative responses, rejection-subtype redaction, shared pending-response handling, safe completed summaries, request ceilings, monitoring cadence and gates, loopback binding, and decoded-only persistence.",
+    "verified_at": "2026-09-27T17:53:25-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium review found ambiguous DTC framing and unredacted SQLite-construction failures. Both were repaired; focused re-review passed and approved offline integration. The count-prefixed hypothesis still requires the separately reviewed bounded vehicle session."
+    "summary": "Independent medium review found two malformed-pending classification edge cases in the new rejection evidence. Both were repaired, the full 98-test suite passed, and final re-review approved the offline change with request behavior and stop conditions unchanged."
   },
   "integration": {
-    "status": "synchronized",
-    "summary": "The reviewed offline repairs and consolidated procedure were privacy-checked, committed, and synchronized on main; no private vehicle or network identifiers or raw exchanges are included."
+    "status": "pending",
+    "summary": "The reviewed rejection-evidence repair and second-run project records are ready for final privacy checking, commit, and synchronization on main."
   },
   "handoff": {
-    "summary": "The first suite run produced useful one-shot Mode 01 evidence and stopped safely at DTC parsing. Offline work now preserves safe evidence, strictly handles the likely count-prefixed DTC shape, and provides a conservative recorded common-DME monitor. The next car visit is a single normal-mode validation session; a PAD-on comparison is only a later contingency if the repair still fails."
+    "summary": "Vehicle collection is finished and the car is no longer needed. The second normal-mode run verified stored/pending DTC decoding but stopped at the permanent read; Mode 09 and monitoring did not run. After synchronization, another computer can pull main and continue the offline PAD-comparison design."
   }
 }
 ---

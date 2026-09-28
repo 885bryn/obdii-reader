@@ -4,7 +4,7 @@ import socket
 
 from .dme_check import DME_TARGET_ADDRESS
 from .gateway_check import TESTER_ADDRESS, load_gateway_capture
-from .hsfz import HsfzClient
+from .hsfz import ERROR_CONTROLS, HsfzClient, MalformedUdsResponse
 
 CHECK_NAME = "HSFZ DME emissions DTCs"
 READS = ((0x03, 0x43, "stored"), (0x07, 0x47, "pending"), (0x0A, 0x4A, "permanent"))
@@ -15,6 +15,25 @@ FAILURE_REASONS = frozenset({
 _DTC_CODE = re.compile(r"[PCBU][0-3][0-9A-F]{3}\Z")
 _MAX_CODES = 4094
 PAYLOAD_ISSUES = frozenset({"count-mismatch", "invalid-shape", "odd-length"})
+REJECTION_SUBTYPES = frozenset({
+    "service-not-supported", "subfunction-not-supported",
+    "incorrect-length-or-format", "busy-repeat-request",
+    "conditions-not-correct", "sequence-error", "request-out-of-range",
+    "other-nrc", "response-pending", "hsfz-error-control",
+})
+_NRC_SUBTYPES = {
+    0x11: "service-not-supported",
+    0x12: "subfunction-not-supported",
+    0x13: "incorrect-length-or-format",
+    0x21: "busy-repeat-request",
+    0x22: "conditions-not-correct",
+    0x24: "sequence-error",
+    0x31: "request-out-of-range",
+}
+
+
+def _nrc_subtype(nrc):
+    return _NRC_SUBTYPES.get(nrc, "other-nrc")
 
 
 class DtcPayloadError(ValueError):
@@ -52,7 +71,7 @@ class EmissionsDtcError(Exception):
     """Failure with an allowlisted public reason and conservative request count."""
 
     def __init__(self, reason, requests_sent=0, *, failed_read=None, payload_issue=None,
-                 completed_reads=None):
+                 completed_reads=None, rejection_subtype=None):
         self.reason = reason if isinstance(reason, str) and reason in FAILURE_REASONS else "unexpected-error"
         self.requests_sent = requests_sent
         self.failed_read = (failed_read if isinstance(failed_read, str)
@@ -60,6 +79,9 @@ class EmissionsDtcError(Exception):
         self.payload_issue = (payload_issue if isinstance(payload_issue, str)
                               and payload_issue in PAYLOAD_ISSUES else None)
         self.completed_reads = _safe_completed_reads(completed_reads, self.failed_read)
+        self.rejection_subtype = (rejection_subtype if self.reason == "uds-rejected"
+                                  and isinstance(rejection_subtype, str)
+                                  and rejection_subtype in REJECTION_SUBTYPES else None)
         super().__init__(self.reason)
 
 
@@ -140,12 +162,13 @@ def read_emissions_dtcs(path, timeout=2.0, *, client_factory=HsfzClient,
     try:
         result = {f"{label}_dtcs": [] for _, _, label in READS}
 
-        def fail(reason, label, payload_issue=None):
+        def fail(reason, label, payload_issue=None, rejection_subtype=None):
             prior = {prior_label: result[f"{prior_label}_dtcs"]
                      for _, _, prior_label in READS[:next(
                          index for index, item in enumerate(READS) if item[2] == label)]}
             raise EmissionsDtcError(reason, requests_sent, failed_read=label,
                                     payload_issue=payload_issue,
+                                    rejection_subtype=rejection_subtype,
                                     completed_reads=prior) from None
 
         for service, positive, label in READS:
@@ -154,13 +177,26 @@ def read_emissions_dtcs(path, timeout=2.0, *, client_factory=HsfzClient,
                 response = client.request(bytes((service,)))
             except TimeoutError:
                 fail("timeout", label)
+            except MalformedUdsResponse:
+                fail("response-invalid", label, "invalid-shape")
             except Exception as exc:
-                reason = "uds-rejected" if isinstance(exc, ConnectionError) and (
-                    "pending UDS response" in str(exc) or "HSFZ error control" in str(exc)
-                ) else "connection-or-transport"
-                fail(reason, label)
+                subtype = None
+                if isinstance(exc, ConnectionError):
+                    message = str(exc)
+                    if message == "pending UDS response is not accepted":
+                        subtype = "response-pending"
+                    else:
+                        match = re.fullmatch(r"HSFZ error control 0x([0-9A-Fa-f]{4})", message)
+                        if match and int(match.group(1), 16) in ERROR_CONTROLS:
+                            subtype = "hsfz-error-control"
+                fail("uds-rejected" if subtype else "connection-or-transport",
+                     label, rejection_subtype=subtype)
             if isinstance(response, bytes) and response[:1] == b"\x7f":
-                fail("uds-rejected", label)
+                # Negative responses are useful diagnostic evidence only when
+                # exactly three bytes and correlated to this request service.
+                if len(response) != 3 or response[1] != service:
+                    fail("response-invalid", label)
+                fail("uds-rejected", label, rejection_subtype=_nrc_subtype(response[2]))
             if not isinstance(response, bytes) or not response.startswith(bytes((positive,))):
                 fail("response-invalid", label)
             try:

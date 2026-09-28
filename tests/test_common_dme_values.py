@@ -9,6 +9,7 @@ from supra_telemetry.common_dme_values import (
 )
 from supra_telemetry.dme_check import DME_TARGET_ADDRESS
 from supra_telemetry.gateway_check import TESTER_ADDRESS
+from supra_telemetry.hsfz import MalformedUdsResponse
 
 
 def private_capture(directory):
@@ -83,6 +84,10 @@ class CommonDmeValueTests(unittest.TestCase):
         cases = (
             (b"\x41\x0d\x01", "response-invalid"),
             (b"\x7f\x01\x31", "uds-rejected"),
+            # HSFZ raises this for a malformed extra-byte NRC 0x78 frame;
+            # its text must not trigger the legacy valid-pending classifier.
+            (MalformedUdsResponse("malformed UDS negative response"),
+             "connection-or-transport"),
             (TimeoutError("private address and VIN"), "timeout"),
         )
         for first_response, reason in cases:
@@ -97,6 +102,8 @@ class CommonDmeValueTests(unittest.TestCase):
             self.assertTrue(client.closed)
             self.assertNotIn("private address", str(raised.exception))
             self.assertNotIn("VIN", repr(raised.exception.__dict__))
+            if isinstance(first_response, MalformedUdsResponse):
+                self.assertNotIn("pending UDS response", str(first_response))
 
     def test_invalid_capture_does_not_connect(self):
         connected = []

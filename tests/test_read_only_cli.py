@@ -134,6 +134,30 @@ class ReadOnlyCliTests(unittest.TestCase):
         self.assertEqual(result["requests_sent"], 2)
         self.assertNotIn("bytes", json.dumps(result))
 
+    def test_dtc_rejection_subtype_is_propagated_by_direct_and_suite_commands(self):
+        direct_error = EmissionsDtcError(
+            "uds-rejected", 1, failed_read="stored",
+            rejection_subtype="service-not-supported")
+        with patch.object(cli, "read_emissions_dtcs", side_effect=direct_error):
+            status, direct = self.invoke("read-emissions-dtcs")
+        self.assertEqual(status, 1)
+        self.assertEqual(direct["reason"], "uds-rejected")
+        self.assertEqual(direct["dtc_failure"], {
+            "read": "stored", "completed_reads": {},
+            "rejection_subtype": "service-not-supported"})
+
+        suite_error = SuiteError(
+            "read_emissions_dtcs", "uds-rejected", 9,
+            ("inventory_mode01", "read_common_dme_values"), {},
+            {"failed_read": "pending", "rejection_subtype": "response-pending"})
+        with patch.object(cli, "run_read_only_suite", side_effect=suite_error):
+            status, suite = self.invoke("collect-read-only-suite")
+        self.assertEqual(status, 1)
+        self.assertEqual(suite["reason"], "uds-rejected")
+        self.assertEqual(suite["dtc_failure"]["rejection_subtype"], "response-pending")
+        self.assertEqual(suite["total_requests"], 9)
+        self.assertNotIn("nrc", json.dumps(suite).lower())
+
     def test_common_dme_monitor_cli_wires_capture_timeout_duration_and_safe_runner_mode(self):
         source = object()
         with patch.object(cli, "CommonDmeMonitorSource", return_value=source) as source_factory, \

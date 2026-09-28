@@ -16,6 +16,10 @@ ERROR_CONTROLS = set(range(0x0040, 0x0046)) | {0x00FF}
 MAX_BODY = 8192
 
 
+class MalformedUdsResponse(ConnectionError):
+    """A correlated UDS response has invalid framing for a known response type."""
+
+
 @dataclass(frozen=True)
 class HsfzFrame:
     control: int
@@ -207,6 +211,8 @@ class HsfzClient:
                     if not self.policy.correlate(payload, response):
                         raise ConnectionError("UDS response does not correlate with request")
                     if response[:1] == b"\x7f" and len(response) >= 3 and response[2] == 0x78:
+                        if len(response) != 3:
+                            raise MalformedUdsResponse("malformed UDS negative response")
                         if self.fail_on_pending:
                             raise ConnectionError("pending UDS response is not accepted")
                         continue

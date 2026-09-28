@@ -127,6 +127,8 @@ class EmissionsDtcTests(unittest.TestCase):
 
             for outcome, reason in ((b"\x43\x01", "response-invalid"),
                                     (b"\x7f\x03\x31", "uds-rejected"),
+                                    (b"\x7f\x07\x31", "response-invalid"),
+                                    (b"\x7f\x03\x31\x00", "response-invalid"),
                                     ("timeout", "timeout")):
                 client = Client(outcome)
                 with self.assertRaises(EmissionsDtcError) as raised:
@@ -140,6 +142,64 @@ class EmissionsDtcTests(unittest.TestCase):
                 self.assertEqual(client.calls, [b"\x03"])
                 self.assertTrue(client.closed)
                 self.assertNotIn("private", str(raised.exception))
+
+    def test_direct_negative_response_subtypes_are_fixed_and_service_correlated(self):
+        cases = ((0x11, "service-not-supported"),
+                 (0x12, "subfunction-not-supported"),
+                 (0x13, "incorrect-length-or-format"),
+                 (0x21, "busy-repeat-request"),
+                 (0x22, "conditions-not-correct"),
+                 (0x24, "sequence-error"),
+                 (0x31, "request-out-of-range"),
+                 (0x78, "other-nrc"), (0x99, "other-nrc"))
+        with tempfile.TemporaryDirectory() as directory:
+            path = private_capture(directory)
+            for nrc, subtype in cases:
+                class Client:
+                    def request(self, _payload):
+                        return bytes((0x7F, 0x03, nrc))
+                    def close(self):
+                        pass
+                with self.subTest(nrc=nrc), self.assertRaises(EmissionsDtcError) as caught:
+                    read_emissions_dtcs(path, client_factory=lambda *_a, **_k: Client())
+                self.assertEqual(caught.exception.reason, "uds-rejected")
+                self.assertEqual(caught.exception.rejection_subtype, subtype)
+                self.assertEqual(caught.exception.requests_sent, 1)
+
+    def test_transport_rejection_subtypes_and_malicious_constructor_are_redacted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = private_capture(directory)
+            cases = ((ConnectionError("pending UDS response is not accepted"),
+                      "response-pending"),
+                     (ConnectionError("HSFZ error control 0x0040"),
+                      "hsfz-error-control"))
+            for failure, subtype in cases:
+                class Client:
+                    def request(self, _payload):
+                        raise failure
+                    def close(self):
+                        pass
+                with self.subTest(subtype=subtype), self.assertRaises(EmissionsDtcError) as caught:
+                    read_emissions_dtcs(path, client_factory=lambda *_a, **_k: Client())
+                self.assertEqual(caught.exception.reason, "uds-rejected")
+                self.assertEqual(caught.exception.rejection_subtype, subtype)
+                self.assertNotIn("0x0040", str(caught.exception))
+            class UnrecognizedControlClient:
+                def request(self, _payload):
+                    raise ConnectionError("HSFZ error control 0x0007")
+                def close(self):
+                    pass
+            with self.assertRaises(EmissionsDtcError) as caught:
+                read_emissions_dtcs(path,
+                                    client_factory=lambda *_a, **_k: UnrecognizedControlClient())
+            self.assertEqual(caught.exception.reason, "connection-or-transport")
+            self.assertIsNone(caught.exception.rejection_subtype)
+        for value in ("VIN-SECRET", "11", "other", object()):
+            error = EmissionsDtcError("uds-rejected", 1, failed_read="stored",
+                                      rejection_subtype=value)
+            self.assertIsNone(error.rejection_subtype)
+        self.assertIsNone(EmissionsDtcError(
+            "response-invalid", 1, rejection_subtype="other-nrc").rejection_subtype)
 
     def test_partial_failure_preserves_only_prior_decoded_reads(self):
         with tempfile.TemporaryDirectory() as directory:

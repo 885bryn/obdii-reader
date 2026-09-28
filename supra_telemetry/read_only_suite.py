@@ -5,7 +5,8 @@ import re
 import time
 
 from .common_dme_values import read_common_dme_values as _read_common_dme_values
-from .emissions_dtcs import read_emissions_dtcs as _read_emissions_dtcs
+from .emissions_dtcs import (REJECTION_SUBTYPES,
+                             read_emissions_dtcs as _read_emissions_dtcs)
 from .mode01_inventory import inventory_mode01 as _inventory_mode01
 from .vehicle_info import verify_vehicle_info as _verify_vehicle_info
 
@@ -57,11 +58,15 @@ class SuiteError(Exception):
         metadata = dtc_failure if isinstance(dtc_failure, dict) else {}
         failed_read = metadata.get("failed_read")
         payload_issue = metadata.get("payload_issue")
+        rejection_subtype = metadata.get("rejection_subtype")
         self.failed_read = (failed_read if isinstance(failed_read, str)
                             and failed_read in {"stored", "pending", "permanent"} else None)
         self.payload_issue = (payload_issue if isinstance(payload_issue, str)
                               and payload_issue in {"count-mismatch", "odd-length",
                                                     "invalid-shape"} else None)
+        self.rejection_subtype = (rejection_subtype if self.reason == "uds-rejected"
+                                  and isinstance(rejection_subtype, str)
+                                  and rejection_subtype in REJECTION_SUBTYPES else None)
         self.dtc_completed_reads = _safe_dtc_completed_reads(
             metadata.get("completed_reads"), self.failed_read)
         super().__init__(
@@ -208,6 +213,7 @@ def run_read_only_suite(path, timeout=2.0, *, inventory_mode01=_inventory_mode01
                 reason, current = "response-invalid", 0
             metadata = ({"failed_read": getattr(exc, "failed_read", None),
                         "payload_issue": getattr(exc, "payload_issue", None),
+                        "rejection_subtype": getattr(exc, "rejection_subtype", None),
                         "completed_reads": getattr(exc, "completed_reads", None)}
                        if phase == "read_emissions_dtcs" else None)
             raise SuiteError(phase, reason, total_requests + current, completed,

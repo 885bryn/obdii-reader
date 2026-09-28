@@ -104,6 +104,7 @@ class ReadOnlySuiteTests(unittest.TestCase):
         phases[2] = lambda *_args: (_ for _ in ()).throw(type("Failure", (Exception,), {
             "reason": "response-invalid", "requests_sent": 1,
             "failed_read": "pending", "payload_issue": "odd-length",
+            "rejection_subtype": "VIN-SECRET",
             "completed_reads": {"stored": ["P0123"]},
         })("VIN-SECRET"))
         original_inventory = phases[0]
@@ -122,6 +123,7 @@ class ReadOnlySuiteTests(unittest.TestCase):
         error = caught.exception
         self.assertEqual(error.failed_read, "pending")
         self.assertEqual(error.payload_issue, "odd-length")
+        self.assertIsNone(error.rejection_subtype)
         self.assertEqual(error.dtc_completed_reads, {
             "stored": {"dtcs": ["P0123"], "count": 1}})
         self.assertEqual(error.completed_summaries, {
@@ -156,6 +158,31 @@ class ReadOnlySuiteTests(unittest.TestCase):
         self.assertEqual(error.failed_read, "stored")
         self.assertEqual(error.payload_issue, "count-mismatch")
         self.assertEqual(error.dtc_completed_reads, {})
+
+    def test_suite_propagates_only_allowlisted_dtc_rejection_subtype(self):
+        phases = self.dependencies((2, 4, 3, 5))
+        class Failure(Exception):
+            reason = "uds-rejected"
+            requests_sent = 1
+            failed_read = "stored"
+            rejection_subtype = "conditions-not-correct"
+        def fail_dtc(path, timeout):
+            self.calls.append(("dtcs", path, timeout))
+            raise Failure("private bytes")
+        phases[2] = fail_dtc
+        with self.assertRaises(SuiteError) as caught:
+            self.run_suite(phases)
+        self.assertEqual(caught.exception.reason, "uds-rejected")
+        self.assertEqual(caught.exception.rejection_subtype, "conditions-not-correct")
+        self.assertEqual([name for name, _, _ in self.calls], ["inventory", "values", "dtcs"])
+        self.assertEqual(self.waits, [2.0, 2.0])
+
+        error = SuiteError("read_emissions_dtcs", "uds-rejected", 9, (), {},
+                           {"failed_read": "stored", "rejection_subtype": "VIN-SECRET"})
+        self.assertIsNone(error.rejection_subtype)
+        error = SuiteError("read_emissions_dtcs", "response-invalid", 9, (), {},
+                           {"failed_read": "stored", "rejection_subtype": "other-nrc"})
+        self.assertIsNone(error.rejection_subtype)
         self.assertEqual(error.dtc_completed_reads, {})
 
     def test_vehicle_info_summary_preserves_vin_support_and_match_states(self):

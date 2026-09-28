@@ -283,6 +283,8 @@ def main(argv=None):
                                               for label, codes in exc.completed_reads.items()}}
                 if exc.payload_issue is not None:
                     detail["payload_issue"] = exc.payload_issue
+                if exc.rejection_subtype is not None:
+                    detail["rejection_subtype"] = exc.rejection_subtype
                 output["dtc_failure"] = detail
             print(json.dumps(output))
             return 1
@@ -322,6 +324,8 @@ def main(argv=None):
                           "completed_reads": exc.dtc_completed_reads}
                 if exc.payload_issue is not None:
                     detail["payload_issue"] = exc.payload_issue
+                if exc.rejection_subtype is not None:
+                    detail["rejection_subtype"] = exc.rejection_subtype
                 output["dtc_failure"] = detail
             print(json.dumps(output))
             return 1

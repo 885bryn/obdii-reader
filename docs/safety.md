@@ -25,7 +25,31 @@ Diagnostic/PAD Mode is permitted only as a manually entered vehicle state for bo
 
 The second consolidated normal-mode run has ended. The first failure correctly ended all vehicle traffic, so the monitor and Mode 09 remain unverified. The vehicle may remain off and disconnected; there is no currently approved vehicle command.
 
-The next work is offline: prepare and independently review a minimal read-only DTC comparison for manually entered PAD/Diagnostic Mode using only the already verified route and fixed Mode 03/07/0A reads. The procedure must define its request ceiling, exact stop conditions, privacy-safe rejection output, battery/state prerequisites, and why the comparison is necessary. Do not enter PAD Mode or run any diagnostic command until that procedure and code are synchronized. Toyota's published PAD instruction applies to its specific ISTA transport-mode deletion procedure and does not by itself establish that generic DTC reading requires PAD Mode.
+Offline preparation and independent review are complete for a minimal read-only DTC comparison in manually entered PAD/Diagnostic Mode using only the already verified route and fixed Mode 03/07/0A reads. Do not enter PAD Mode or run the command until the reviewed code and procedure are synchronized. Toyota's published PAD instruction applies to its specific ISTA transport-mode deletion procedure and does not by itself establish that generic DTC reading requires PAD Mode.
+
+## Reviewed manual PAD DTC comparison
+
+The implementation, tests, documentation, and independent review are complete; the command remains on hold until the reviewed commit is synchronized. Its sole purpose is to determine whether manually entered PAD/Diagnostic Mode changes the permanent Mode 0A rejection observed during the prior normal-mode run. The historical normal-mode result was no stored DTC, pending `P0420`, and rejection of the permanent read. The comparison does not diagnose `P0420`, prove that PAD is required, or provide product-acceptance evidence.
+
+Before the one candidate run:
+
+1. Use the stationary setup in step 1 above: outdoors, parking brake set, transmission in Park (or neutral for a manual), wheels chocked, engine off, and a second person available. Do not test while driving.
+2. Close ISTA, BimmerLink, coding tools, and any other application that could use the diagnostic connection. Use only the already verified private discovery capture and its source-bound route; do not rediscover, scan, or substitute addresses.
+3. Connect an appropriate battery charger at the under-hood jump-start terminals. Toyota bulletin T-SB-0062-22 gives the conservative limits used here for its 2023 Supra PDS procedure: keep voltage at or above 12.3 V, do not exceed 14.8 V at room temperature for an AGM battery, and do not use rapid charging. If those conditions cannot be maintained, do not begin.
+4. Manually enter PAD/Diagnostic Mode only after the charger and stationary setup are confirmed. The cited Toyota procedure uses three Start-Stop presses within 0.8 seconds. The application must never perform or simulate this action. Do not continue into the bulletin's ISTA transport-mode deletion steps; that workflow includes state-changing operations and fault-memory clearing that are prohibited here.
+5. Confirm that the synchronized build's complete offline test suite passed and its independent review approved this exact command and procedure.
+
+Run exactly once:
+
+```powershell
+python -m supra_telemetry compare-pad-emissions-dtcs --capture captures/discovery.json --confirm-manual-pad
+```
+
+The confirmation flag is mandatory and acknowledges only that PAD was entered manually under this reviewed procedure. The command opens one source-bound connection and attempts at most three application requests in order: Mode 03 stored DTCs once, Mode 07 pending DTCs once, and Mode 0A permanent DTCs once. The request counter advances before each attempt. It performs no retry, reconnect, discovery, scan, session change, tester-present exchange, fault clear, routine, control, write, or raw persistence.
+
+Any timeout, connection or transport error, exact negative response, response-pending event, HSFZ error-control event, malformed or unexpected response, charger problem, acquisition error, or vehicle warning ends the run immediately. Later reads are not attempted. Do not switch vehicle state, retry, rerun the suite, or issue another diagnostic command in the same session. Save only the command's privacy-safe JSON result, which may contain decoded DTCs, counts, the failed read, fixed structural categories, and an allowlisted rejection category; never save or share raw replies, capture contents, numeric negative-response codes, or vehicle/network identifiers.
+
+After the command exits, manually leave PAD mode and power the vehicle down according to the applicable vehicle instructions, then disconnect the diagnostic link and charger safely. Compare the one PAD result only with the recorded bounded normal-mode result. A PAD success or different rejection is research evidence only; normal PAD-off behavior remains the product requirement.
 
 This is a conservative engineering checklist, not a substitute for Toyota/BMW service instructions. Do not probe unknown identifiers or try write-capable services.
 

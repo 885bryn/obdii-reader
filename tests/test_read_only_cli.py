@@ -134,6 +134,57 @@ class ReadOnlyCliTests(unittest.TestCase):
         self.assertEqual(result["requests_sent"], 2)
         self.assertNotIn("bytes", json.dumps(result))
 
+    def test_pad_dtc_comparison_requires_confirmation_before_reader_call(self):
+        with patch.object(cli, "read_emissions_dtcs") as reader:
+            with self.assertRaises(SystemExit):
+                cli.main(["compare-pad-emissions-dtcs", "--capture", "private.json"])
+            reader.assert_not_called()
+
+    def test_pad_dtc_comparison_delegates_once_and_uses_distinct_safe_label(self):
+        result = {"result": "verified", "check": cli.EMISSIONS_DTCS_CHECK,
+                  "stored_dtcs": ["P0123"], "pending_dtcs": [],
+                  "permanent_dtcs": [], "requests_sent": 3}
+        output = io.StringIO()
+        with patch.object(cli, "read_emissions_dtcs", return_value=result) as reader, \
+                contextlib.redirect_stdout(output):
+            status = cli.main(["compare-pad-emissions-dtcs", "--capture", "private.json",
+                               "--timeout", "1.25", "--confirm-manual-pad"])
+        reader.assert_called_once_with("private.json", 1.25)
+        self.assertEqual(status, 0)
+        parsed = json.loads(output.getvalue())
+        self.assertEqual(parsed["check"], "manual PAD emissions DTC comparison")
+        self.assertEqual({key: value for key, value in parsed.items() if key != "check"},
+                         {key: value for key, value in result.items() if key != "check"})
+
+    def test_pad_dtc_comparison_preserves_redacted_partial_failure_and_unexpected_shape(self):
+        error = EmissionsDtcError("uds-rejected", 2, failed_read="pending",
+                                  rejection_subtype="service-not-supported",
+                                  completed_reads={"stored": ["P0123"]})
+        with patch.object(cli, "read_emissions_dtcs", side_effect=error):
+            status, rejected = self.invoke_pad_comparison()
+        self.assertEqual(status, 1)
+        self.assertEqual(rejected, {
+            "result": "failed", "check": "manual PAD emissions DTC comparison",
+            "stored_dtcs": None, "pending_dtcs": None, "permanent_dtcs": None,
+            "requests_sent": 2, "reason": "uds-rejected",
+            "dtc_failure": {"read": "pending", "completed_reads": {
+                "stored": {"dtcs": ["P0123"], "count": 1}},
+                "rejection_subtype": "service-not-supported"}})
+        with patch.object(cli, "read_emissions_dtcs", side_effect=RuntimeError("raw private bytes")):
+            status, unexpected = self.invoke_pad_comparison()
+        self.assertEqual(status, 1)
+        self.assertEqual(unexpected, {
+            "result": "failed", "check": "manual PAD emissions DTC comparison",
+            "stored_dtcs": None, "pending_dtcs": None, "permanent_dtcs": None,
+            "requests_sent": 0, "reason": "unexpected-error"})
+
+    def invoke_pad_comparison(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            status = cli.main(["compare-pad-emissions-dtcs", "--capture", "private.json",
+                               "--confirm-manual-pad"])
+        return status, json.loads(output.getvalue())
+
     def test_dtc_rejection_subtype_is_propagated_by_direct_and_suite_commands(self):
         direct_error = EmissionsDtcError(
             "uds-rejected", 1, failed_read="stored",

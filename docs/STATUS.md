@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "offline_hardening",
+  "workflow_stage": "synchronization",
   "health": "healthy",
-  "updated_at": "2026-09-27T17:56:04-07:00",
+  "updated_at": "2026-09-27T18:12:00-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,50 +23,47 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T010-3",
+      "id": "T010-4",
       "title": "Prepare bounded PAD-on DTC comparison",
-      "status": "ready",
+      "status": "reviewed",
       "path": "docs/safety.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "A second normal-mode suite run verified strict count-prefixed stored and pending DTC reads, reporting no stored code and pending P0420, then stopped safely when the permanent read was rejected after 13 requests. Offline rejection evidence was hardened with fixed privacy-safe categories; all 98 tests pass and independent medium re-review approved the repair.",
-    "at": "2026-09-27T17:53:25-07:00",
+    "summary": "The dedicated manual-PAD DTC comparison reuses the unchanged three-request Mode 03/07/0A engine behind an explicit confirmation gate. The implementation passed all 101 offline tests, and independent medium review approved both the implementation and bounded vehicle procedure; no vehicle traffic was sent.",
+    "at": "2026-09-27T18:12:00-07:00",
     "evidence": [
       "docs/PROJECT_HISTORY.md",
-      "tests/test_emissions_dtcs.py",
-      "tests/test_core.py"
+      "docs/safety.md",
+      "tests/test_read_only_cli.py"
     ]
   },
   "next_action": {
-    "summary": "On the next computer, pull main and continue offline with preparation and independent review of a minimal manually entered PAD/Diagnostic Mode DTC comparison. No vehicle command is currently approved.",
-    "owner": "agent",
+    "summary": "Privacy-check, commit, and push the independently approved manual PAD/Diagnostic Mode DTC comparison and procedure. Keep the vehicle hold in place until synchronization is confirmed.",
+    "owner": "lead",
     "reference": "docs/safety.md"
   },
-  "attention": [
-    "The second run verified count-prefixed parsing only for stored and pending reads. Its pre-subtype build retained no safe category for the permanent-read rejection, so the rejection cause remains unknown.",
-    "P0420 was observed once as pending only, not stored or permanent. Mode 09, common-DME repeated acquisition, SQLite recording, and CSV content remain vehicle-unverified."
-  ],
+  "attention": [],
   "architecture": {
     "status": "aligned",
-    "summary": "The suite and monitor remain strictly read-only, source-bound, bounded, serialized, privacy-safe, and fail-closed. DTC negatives require exact shape and service correlation; only allowlisted rejection categories propagate, while malformed pending responses and all acquisition errors stop later traffic.",
+    "summary": "The dedicated PAD comparison is a manually confirmed CLI gate over the unchanged three-read DTC engine. It adds no service, route, request, retry, session action, or vehicle-state automation and preserves source binding, privacy-safe evidence, and stop-on-first-failure behavior.",
     "reference": "docs/architecture.md"
   },
   "verification": {
     "status": "passed",
-    "summary": "All 98 offline tests pass. Coverage includes strict count-prefixed DTC parsing, exact and malformed negative responses, rejection-subtype redaction, shared pending-response handling, safe completed summaries, request ceilings, monitoring cadence and gates, loopback binding, and decoded-only persistence.",
-    "verified_at": "2026-09-27T17:53:25-07:00"
+    "summary": "All 101 offline tests pass. Focused coverage proves the PAD confirmation is required before reader invocation, the confirmed command delegates once to the existing three-read engine, and success, rejection, partial progress, and unexpected failures retain fixed privacy-safe output.",
+    "verified_at": "2026-09-27T18:08:28-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium review found two malformed-pending classification edge cases in the new rejection evidence. Both were repaired, the full 98-test suite passed, and final re-review approved the offline change with request behavior and stop conditions unchanged."
+    "summary": "Independent medium review found no substantive correctness, safety, privacy, documentation, or regression issue and independently reproduced all 101 passing offline tests. Actual PAD state and vehicle response remain empirical limitations."
   },
   "integration": {
-    "status": "synchronized",
-    "summary": "The reviewed rejection-evidence repair and second-run project records were privacy-checked, committed, and synchronized on main; private capture values and raw exchanges remain local."
+    "status": "unmerged",
+    "summary": "The approved offline PAD-comparison preparation is local and has not yet been committed or synchronized."
   },
   "handoff": {
-    "summary": "Vehicle collection is finished and the car is no longer needed. The second normal-mode run verified stored/pending DTC decoding but stopped at the permanent read; Mode 09 and monitoring did not run. After synchronization, another computer can pull main and continue the offline PAD-comparison design."
+    "summary": "The offline PAD-comparison command and procedure are reviewed and verified but not yet synchronized. No vehicle command is approved until the reviewed commit is pushed and the project record confirms synchronization."
   }
 }
 ---

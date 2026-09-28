@@ -145,6 +145,11 @@ def main(argv=None):
     emissions_dtcs = sub.add_parser("read-emissions-dtcs", help="bounded stored, pending, and permanent emissions DTC reads")
     emissions_dtcs.add_argument("--capture", required=True, help="private JSON file created by discover")
     emissions_dtcs.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    pad_dtcs = sub.add_parser("compare-pad-emissions-dtcs", help="bounded emissions DTC comparison after manually entering PAD/Diagnostic Mode")
+    pad_dtcs.add_argument("--capture", required=True, help="private JSON file created by discover")
+    pad_dtcs.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    pad_dtcs.add_argument("--confirm-manual-pad", action="store_true", required=True,
+                          help="confirm PAD/Diagnostic Mode has already been entered manually under the reviewed vehicle procedure")
     vehicle_info = sub.add_parser("verify-vehicle-info", help="bounded privacy-safe Mode 09 information check")
     vehicle_info.add_argument("--capture", required=True, help="private JSON file created by discover")
     vehicle_info.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
@@ -268,12 +273,14 @@ def main(argv=None):
             return 1
         print(json.dumps(result))
         return 0
-    if args.command == "read-emissions-dtcs":
+    if args.command in ("read-emissions-dtcs", "compare-pad-emissions-dtcs"):
+        check = ("manual PAD emissions DTC comparison"
+                 if args.command == "compare-pad-emissions-dtcs" else EMISSIONS_DTCS_CHECK)
         try:
             result = read_emissions_dtcs(args.capture, args.timeout)
         except EmissionsDtcError as exc:
             reason = exc.reason if exc.reason in EMISSIONS_DTCS_FAILURE_REASONS else "unexpected-error"
-            output = {"result": "failed", "check": EMISSIONS_DTCS_CHECK,
+            output = {"result": "failed", "check": check,
                       "stored_dtcs": None, "pending_dtcs": None,
                       "permanent_dtcs": None, "requests_sent": exc.requests_sent,
                       "reason": reason}
@@ -289,11 +296,14 @@ def main(argv=None):
             print(json.dumps(output))
             return 1
         except Exception:
-            print(json.dumps({"result": "failed", "check": EMISSIONS_DTCS_CHECK,
+            print(json.dumps({"result": "failed", "check": check,
                               "stored_dtcs": None, "pending_dtcs": None,
                               "permanent_dtcs": None, "requests_sent": 0,
                               "reason": "unexpected-error"}))
             return 1
+        if args.command == "compare-pad-emissions-dtcs":
+            result = dict(result)
+            result["check"] = check
         print(json.dumps(result))
         return 0
     if args.command == "verify-vehicle-info":

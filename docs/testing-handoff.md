@@ -113,7 +113,7 @@ A second reviewed stationary, engine-idling, PAD-off run verified the strict cou
 
 Offline code now retains only fixed, allowlisted rejection subtypes for exact service-correlated negative replies, response-pending, or defined HSFZ error-control events. Malformed replies remain invalid, and every rejection still stops immediately. All 98 tests pass and independent medium re-review approved the repair.
 
-No further vehicle action is currently approved. The car may remain off and disconnected. The next work is offline preparation and independent review of a minimal manually entered PAD/Diagnostic Mode DTC comparison. Do not rerun the full suite, start the common monitor, or enter PAD Mode until that exact procedure is synchronized. A PAD-on result will be research evidence only; normal-mode product behavior remains the acceptance target.
+The dedicated PAD comparison implementation passed all 101 offline tests, and independent medium review approved both the implementation and detailed procedure. The car may remain off and disconnected while the reviewed commit is not yet synchronized. The command is `python -m supra_telemetry compare-pad-emissions-dtcs --capture captures/discovery.json --confirm-manual-pad`; it reuses only the fixed Mode 03/07/0A DTC path and cannot enter PAD mode. Do not run it, rerun the full suite, start the common monitor, or enter PAD Mode until this exact implementation and `docs/safety.md` are synchronized. A future PAD-on result will be research evidence only; normal-mode product behavior remains the acceptance target.
 
 The already completed temperature support check verified both temperature PIDs on this vehicle, so its separate optional value check is available as:
 

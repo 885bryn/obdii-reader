@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "offline_hardening",
   "health": "healthy",
-  "updated_at": "2026-09-27T17:53:25-07:00",
+  "updated_at": "2026-09-27T17:56:04-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -39,7 +39,7 @@
     ]
   },
   "next_action": {
-    "summary": "Finish privacy checking, commit, and synchronization of the reviewed second-run records and rejection-evidence repair; then continue offline with a minimal manually entered PAD/Diagnostic Mode DTC comparison. No vehicle command is currently approved.",
+    "summary": "On the next computer, pull main and continue offline with preparation and independent review of a minimal manually entered PAD/Diagnostic Mode DTC comparison. No vehicle command is currently approved.",
     "owner": "agent",
     "reference": "docs/safety.md"
   },
@@ -62,8 +62,8 @@
     "summary": "Independent medium review found two malformed-pending classification edge cases in the new rejection evidence. Both were repaired, the full 98-test suite passed, and final re-review approved the offline change with request behavior and stop conditions unchanged."
   },
   "integration": {
-    "status": "pending",
-    "summary": "The reviewed rejection-evidence repair and second-run project records are ready for final privacy checking, commit, and synchronization on main."
+    "status": "synchronized",
+    "summary": "The reviewed rejection-evidence repair and second-run project records were privacy-checked, committed, and synchronized on main; private capture values and raw exchanges remain local."
   },
   "handoff": {
     "summary": "Vehicle collection is finished and the car is no longer needed. The second normal-mode run verified stored/pending DTC decoding but stopped at the permanent read; Mode 09 and monitoring did not run. After synchronization, another computer can pull main and continue the offline PAD-comparison design."

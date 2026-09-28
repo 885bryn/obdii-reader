@@ -62,8 +62,8 @@
     "summary": "Independent medium review approved the faster scheduler after repair, and a separate independent review approved the exact 30-second one-run vehicle-validation procedure after correcting its DTC and browser-failure wording."
   },
   "integration": {
-    "status": "local_changes",
-    "summary": "The completed faster-cadence result and revoked one-time authorization are recorded in local project records pending final commit and push."
+    "status": "synchronized",
+    "summary": "The completed faster-cadence result and revoked one-time authorization are synchronized to origin/main in commit 7cbc95b."
   },
   "handoff": {
     "summary": "The one-time 30-second faster-cadence validation is complete and must not be repeated. It exited cleanly with no reported vehicle warning, but no end-of-run rate summary was retained. No vehicle command is currently authorized."

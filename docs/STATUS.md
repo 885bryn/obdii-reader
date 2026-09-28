@@ -63,8 +63,8 @@
     "summary": "Independent medium review approved the faster scheduler after repair, and a separate independent review approved the exact 30-second one-run vehicle-validation procedure after correcting its DTC and browser-failure wording."
   },
   "integration": {
-    "status": "local_changes",
-    "summary": "The faster implementation is synchronized. The newly approved 30-second procedure and authorization are local changes pending final commit and push."
+    "status": "synchronized",
+    "summary": "The faster implementation and independently reviewed 30-second procedure are synchronized to origin/main; authorization is recorded in commit 198da04."
   },
   "handoff": {
     "summary": "The original live rehearsal is complete and must not be repeated. Exactly one stationary, PAD-off, 30-second faster-cadence validation is approved after synchronization, with at most three paced DTC reads followed by 150 monitoring attempts. Stop on any error or warning and do not retry."

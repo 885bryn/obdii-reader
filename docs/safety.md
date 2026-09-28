@@ -23,13 +23,15 @@ Diagnostic/PAD Mode is permitted only as a manually entered vehicle state for bo
 
 ## Current vehicle authorization
 
-The second consolidated normal-mode run has ended. The first failure correctly ended all vehicle traffic, so the monitor and Mode 09 remain unverified and unapproved. Apart from the single conditional PAD comparison below, the vehicle may remain off and disconnected and no other vehicle command is approved.
+The second consolidated normal-mode run and the single conditional PAD comparison have ended. Each failure correctly ended vehicle traffic. The monitor and Mode 09 remain unverified and unapproved. The vehicle may remain off and disconnected; no vehicle command is currently approved.
 
-Offline preparation and independent review are complete for a minimal read-only DTC comparison in manually entered PAD/Diagnostic Mode using only the already verified route and fixed Mode 03/07/0A reads. Implementation commit `ab599d2` is synchronized; exactly one run of the command below is approved when every listed prerequisite is satisfied. No other vehicle command is approved. Toyota's published PAD instruction applies to its specific ISTA transport-mode deletion procedure and does not by itself establish that generic DTC reading requires PAD Mode.
+Offline preparation and independent review were completed for a minimal read-only DTC comparison in manually entered PAD/Diagnostic Mode using only the already verified route and fixed Mode 03/07/0A reads. Implementation commit `ab599d2` is synchronized, and the single authorized run occurred on 2026-09-28. It must not be repeated. Toyota's published PAD instruction applies to its specific ISTA transport-mode deletion procedure and does not by itself establish that generic DTC reading requires PAD Mode.
 
-## Reviewed manual PAD DTC comparison
+## Completed manual PAD DTC comparison
 
-The implementation, tests, documentation, independent review, and synchronization are complete. Its sole purpose is to determine whether manually entered PAD/Diagnostic Mode changes the permanent Mode 0A rejection observed during the prior normal-mode run. The historical normal-mode result was no stored DTC, pending `P0420`, and rejection of the permanent read. The comparison does not diagnose `P0420`, prove that PAD is required, or provide product-acceptance evidence.
+The implementation, tests, documentation, independent review, synchronization, and one authorized run are complete. The command attempted all three fixed reads: stored and pending each decoded `P0420`, while the permanent Mode 0A read was rejected as `service-not-supported`. It reported three attempts and stopped with no retry, other vehicle command, or raw persistence. The historical normal-mode result was no stored DTC, pending `P0420`, and rejection of the permanent read. These single observations show that PAD did not make Mode 0A available in the comparison; they do not explain the stored-code difference, diagnose `P0420`, prove that PAD is required, or provide product-acceptance evidence.
+
+The procedure below is retained as historical evidence only. It is no longer authorization to run the command.
 
 Before the one candidate run:
 

@@ -25,20 +25,21 @@
 - On 2026-09-27, `verify-common-dme-support` completed once on the stationary vehicle with the engine off and PAD/Diagnostic Mode off. Its single Mode 01 PID `00` request reported advertised support for engine RPM PID `0C`, vehicle speed PID `0D`, intake-air-temperature PID `0F`, and throttle-position PID `11`, then exited successfully. This verifies support bits only, not value behavior or polling safety.
 - Later on 2026-09-27, one reviewed stationary, engine-idling, PAD-off `collect-read-only-suite` run completed its conditional Mode 01 inventory and four common-value phases. All four exact value responses were accepted and the reviewed stationary gate passed. The DTC phase then stopped fail-closed with `response-invalid` after the command reported a conservative total of 11 requests. Mode 09 was not attempted, there was no retry, and no raw exchange was persisted. The old code path narrows the failure to an expected positive DTC service followed by an odd-length payload, but it does not retain the exact bytes or identify which fixed DTC read failed.
 - A second reviewed stationary, engine-idling, PAD-off suite run completed the same first two phases, with stationary values of 983 rpm, 0 km/h, 28 °C intake-air temperature, and 20.78% throttle. Strict count-prefixed decoding then reported no stored DTCs and one pending DTC, `P0420`. The permanent Mode 0A read returned the fixed `uds-rejected` category, so the suite stopped after a conservative total of 13 requests. Mode 09 and the common-DME monitor did not run; there was no retry, PAD switch, or raw persistence. Because the run used the pre-subtype build, the rejection's exact safe category remains unknown.
+- On 2026-09-28, one reviewed stationary, manually entered PAD-on comparison attempted exactly the three fixed DTC reads. Stored and pending each decoded `P0420`; the permanent Mode 0A read was rejected with the sanitized `service-not-supported` subtype. The command reported three attempts and exited failed as designed, with no retry, other vehicle command, or raw persistence. This establishes only that PAD did not make the permanent service available in this run. The stored-code difference from the earlier normal-mode run cannot be attributed to PAD from these single observations.
 - Staged USB isolation left the Ethernet adapter healthy alone and with ENET, and the link remained up during the successful normal-mode read. The earlier Windows Code 43 / Port Reset Failed event is therefore classified as a laptop USB enumeration/reset incident, not evidence that PAD or a different vehicle protocol is required.
 
 ## Inferred
 
 - The observed HSFZ identification response confirms an ENET/HSFZ discovery path on the tested vehicle. It does not establish that the responding peer accepts the application's TCP diagnostic framing or reveal ECU topology, target addresses, session needs, or supported data.
 - Standard SAE PIDs are worth trying only after connection and ECU support are confirmed.
-- The old pair-only DTC parser caused the first DTC-phase failure. The second run confirms that count-prefixed framing works for stored and pending reads on this route, but it does not establish permanent-read behavior or generalize beyond the tested vehicle and session.
+- The old pair-only DTC parser caused the first DTC-phase failure. Normal-mode and PAD-on observations confirm that count-prefixed framing works for stored and pending reads on this route. The PAD-on rejection safely identifies the permanent service as unsupported in that one session; it does not establish behavior in every state or explain the stored-code change.
 
 ## Unknown / empirical
 
 - Behavior beyond the single 300-second monitor run and monitor behavior with recording enabled.
 - DME session requirements, battery-support limits, vehicle request limits beyond the observed bounded cadence, and HSFZ keep-alive requirements.
 - Exact observed values, useful ranges, and safe repeated-acquisition cadence for PIDs `0C`, `0D`, `0F`, and `11`; their first one-shot response set passed the bounded stationary gate, while transmission/chassis signals remain unverified.
-- The exact retained bytes and failing Mode 03/07/0A read from the first DTC failure, whether the strict count-prefixed repair succeeds, and all vehicle behavior for the privacy-redacted Mode 09 information check. No raw failed response was retained and Mode 09 did not run.
+- A positive permanent Mode 0A response and all vehicle behavior for the privacy-redacted Mode 09 information check. No raw failed response was retained, and Mode 09 did not run.
 - DoIP routing and support. The bounded discovery attempt saw no DoIP announcement, and live DoIP routing is not implemented.
 
 ## References

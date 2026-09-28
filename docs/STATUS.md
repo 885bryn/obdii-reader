@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "handoff",
   "health": "healthy",
-  "updated_at": "2026-09-28T15:35:35-07:00",
+  "updated_at": "2026-09-28T15:40:12-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -40,12 +40,12 @@
     ]
   },
   "next_action": {
-    "summary": "Prepare and independently review a separately bounded normal-mode vehicle-validation procedure for the faster cadence before authorizing any live run. No vehicle command is currently authorized.",
-    "owner": "lead",
+    "summary": "Run the single authorized 30-second stationary normal-mode faster-cadence validation exactly as documented, then report only the privacy-safe outcome. Do not retry or run another vehicle command in the same session.",
+    "owner": "user",
     "reference": "docs/safety.md"
   },
   "attention": [
-    "No vehicle command is currently authorized.",
+    "Exactly one 30-second faster-cadence validation is authorized after synchronization; no retry or other vehicle command is approved.",
     "The faster 100 ms-slot scheduler is offline-only and has not been vehicle-tested."
   ],
   "architecture": {
@@ -60,14 +60,14 @@
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium re-review found and drove repair of catch-up bursts and rolling-rate jitter, then approved the final skipped-slot scheduler, strict five-starts-per-second limiter, tests, UI wording, and no-authorization safety boundary."
+    "summary": "Independent medium review approved the faster scheduler after repair, and a separate independent review approved the exact 30-second one-run vehicle-validation procedure after correcting its DTC and browser-failure wording."
   },
   "integration": {
-    "status": "synchronized",
-    "summary": "The completed live result, independently reviewed faster offline candidate, tests, and operational records are synchronized to origin/main in commit 73ce854."
+    "status": "local_changes",
+    "summary": "The faster implementation is synchronized. The newly approved 30-second procedure and authorization are local changes pending final commit and push."
   },
   "handoff": {
-    "summary": "The original live rehearsal is complete and must not be repeated. The faster candidate remains finite at 300 seconds and at most 1,500 sensor attempts, but is offline-only until verification and review finish. No vehicle command is currently authorized; simulated mode remains the presentation fallback."
+    "summary": "The original live rehearsal is complete and must not be repeated. Exactly one stationary, PAD-off, 30-second faster-cadence validation is approved after synchronization, with at most three paced DTC reads followed by 150 monitoring attempts. Stop on any error or warning and do not retry."
   }
 }
 ---

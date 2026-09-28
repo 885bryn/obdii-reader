@@ -31,8 +31,56 @@ run used the reviewed one-request-per-second build and exited cleanly after its
 zero speed, plausible stationary values, stored and pending `P0420`, and the
 previously allowed permanent `service-not-supported` result. No raw exchange was
 persisted. This establishes only that bounded run and does not approve a retry,
-client demonstration, or higher request rate. The faster 100 ms-slot candidate is
-offline-only. **No vehicle command is currently authorized.**
+client demonstration, or higher request rate. The faster candidate passed all
+117 offline tests, independent medium review, and fresh independent verification.
+Independent review approved the exact 30-second procedure below. Exactly one
+stationary normal-mode validation run is now authorized under that procedure. No
+retry, longer run, second dashboard run, or other vehicle command is authorized.
+
+## Authorized faster-cadence validation
+
+This procedure authorizes one stationary 30-second candidate run of the reviewed
+faster scheduler. `docs/STATUS.md` records independent approval. A clean result would verify only this short run; it
+would not authorize a retry, a 300-second run, or a client demonstration.
+
+Before the candidate run:
+
+1. Park outdoors, apply the parking brake, select Park, chock the wheels, and keep
+   a second person available. Start the engine normally with PAD/Diagnostic Mode
+   off. Do not test while driving.
+2. Close ISTA, BimmerLink, coding tools, and every other application that could
+   use the diagnostic connection. Use only the existing private capture and its
+   verified source-bound route; do not rediscover, scan, substitute an address,
+   or run another vehicle command in this session.
+3. Confirm the adapter is up with one IPv4 link-local address, the synchronized
+   build is at the reviewed commit, all 117 offline tests pass, and independent
+   review approves this exact procedure. Do not begin if the adapter, capture,
+   vehicle state, battery condition, or procedure status is uncertain.
+
+Run exactly once:
+
+```powershell
+python -m supra_telemetry client-dashboard --mode live --capture captures/discovery.json --duration 30
+```
+
+The existing DTC snapshot remains limited to Mode 03, 07, and 0A once each with
+at least one second between starts. Monitoring may proceed only after either a
+complete safely decoded snapshot or the previously observed partial outcome of
+safely decoded stored/pending results plus permanent `service-not-supported`.
+Monitoring then uses the reviewed 20-slot
+schedule, a rolling maximum of five starts in any one-second window, a 30-second
+request-start deadline, and at most 150 monitoring attempts. Overdue slots are
+skipped. The first error stops acquisition without retry or reconnect.
+
+Any timeout, transport error, unexpected response, disallowed rejection,
+implausible value, nonzero speed, vehicle warning, adapter issue, or browser/API
+failure ends the run. On a browser/API failure, press `Ctrl+C` immediately because
+the acquisition worker cannot detect a closed or failed browser; otherwise press
+`Ctrl+C` only if the dashboard does not stop itself. Then disconnect cleanly. Do
+not retry, switch PAD state, run another command, or
+start a longer dashboard session. Report only exit status, decoded values/codes,
+observed sample rates/ages, and fixed error categories. Never share the capture,
+raw responses, VIN, MAC, IP/interface information, or other identifiers.
 
 ## Completed normal-mode client-dashboard rehearsal
 

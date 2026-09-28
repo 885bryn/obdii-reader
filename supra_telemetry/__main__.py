@@ -29,6 +29,7 @@ from .read_only_suite import (CHECK_NAME as READ_ONLY_SUITE_CHECK,
 from .temperature_values import (CHECK_NAME as TEMPERATURE_VALUES_CHECK,
                                  FAILURE_REASONS as TEMPERATURE_VALUES_FAILURE_REASONS,
                                  TemperatureValueError, read_temperature_values)
+from .common_dme_monitor import CommonDmeMonitorSource
 from .vehicle_info import (CHECK_NAME as VEHICLE_INFO_CHECK,
                            FAILURE_REASONS as VEHICLE_INFO_FAILURE_REASONS,
                            VehicleInfoError, verify_vehicle_info)
@@ -159,6 +160,12 @@ def main(argv=None):
     monitor.add_argument("--duration", type=int, default=300, help="automatic stop in seconds (1 to 300)")
     monitor.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     monitor.add_argument("--ui-host", default="127.0.0.1"); monitor.add_argument("--port", type=int, default=8765)
+    common_monitor = sub.add_parser("monitor-common-dme", help="bounded local dashboard for stationary common-DME values")
+    common_monitor.add_argument("--capture", required=True, help="private JSON file created by discover")
+    common_monitor.add_argument("--db", help="optional SQLite sample log (off by default)")
+    common_monitor.add_argument("--duration", type=int, default=300, help="automatic stop in seconds (1 to 300)")
+    common_monitor.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    common_monitor.add_argument("--ui-host", default="127.0.0.1"); common_monitor.add_argument("--port", type=int, default=8765)
     run = sub.add_parser("run", help="live HSFZ reads using a verified, address-explicit profile")
     run.add_argument("--profile", required=True); run.add_argument("--host", required=True, help="explicit discovered gateway IPv4 address"); run.add_argument("--db", required=True)
     run.add_argument("--ui-host", default="127.0.0.1"); run.add_argument("--port", type=int, default=8765); run.add_argument("--interval", type=float, default=1.0); run.add_argument("--timeout", type=float, default=2.0)
@@ -266,10 +273,18 @@ def main(argv=None):
             result = read_emissions_dtcs(args.capture, args.timeout)
         except EmissionsDtcError as exc:
             reason = exc.reason if exc.reason in EMISSIONS_DTCS_FAILURE_REASONS else "unexpected-error"
-            print(json.dumps({"result": "failed", "check": EMISSIONS_DTCS_CHECK,
-                              "stored_dtcs": None, "pending_dtcs": None,
-                              "permanent_dtcs": None, "requests_sent": exc.requests_sent,
-                              "reason": reason}))
+            output = {"result": "failed", "check": EMISSIONS_DTCS_CHECK,
+                      "stored_dtcs": None, "pending_dtcs": None,
+                      "permanent_dtcs": None, "requests_sent": exc.requests_sent,
+                      "reason": reason}
+            if exc.failed_read is not None or exc.completed_reads:
+                detail = {"read": exc.failed_read,
+                          "completed_reads": {label: {"dtcs": codes, "count": len(codes)}
+                                              for label, codes in exc.completed_reads.items()}}
+                if exc.payload_issue is not None:
+                    detail["payload_issue"] = exc.payload_issue
+                output["dtc_failure"] = detail
+            print(json.dumps(output))
             return 1
         except Exception:
             print(json.dumps({"result": "failed", "check": EMISSIONS_DTCS_CHECK,
@@ -297,10 +312,18 @@ def main(argv=None):
         try:
             result = run_read_only_suite(args.capture, args.timeout)
         except SuiteError as exc:
-            print(json.dumps({"result": "failed", "check": READ_ONLY_SUITE_CHECK,
-                              "failed_phase": exc.phase, "reason": exc.reason,
-                              "completed_phases": list(exc.completed_phases),
-                              "total_requests": exc.total_requests}))
+            output = {"result": "failed", "check": READ_ONLY_SUITE_CHECK,
+                      "failed_phase": exc.phase, "reason": exc.reason,
+                      "completed_phases": list(exc.completed_phases),
+                      "completed_summaries": exc.completed_summaries,
+                      "total_requests": exc.total_requests}
+            if exc.failed_read is not None or exc.dtc_completed_reads:
+                detail = {"read": exc.failed_read,
+                          "completed_reads": exc.dtc_completed_reads}
+                if exc.payload_issue is not None:
+                    detail["payload_issue"] = exc.payload_issue
+                output["dtc_failure"] = detail
+            print(json.dumps(output))
             return 1
         except Exception:
             print(json.dumps({"result": "failed", "check": READ_ONLY_SUITE_CHECK,
@@ -333,7 +356,15 @@ def main(argv=None):
             parser.error("timeout must be between 0.1 and 5 seconds")
         if args.ui_host not in ("127.0.0.1", "localhost", "::1"):
             parser.error("dashboard must bind to loopback")
-        store = TelemetryStore(args.db) if args.db else None
+        store = None
+        try:
+            store = TelemetryStore(args.db) if args.db else None
+        except Exception:
+            if store is not None:
+                store.close()
+            print(json.dumps({"result": "failed", "check": "temperature monitor",
+                              "reason": "recording-unavailable"}))
+            return 1
         try:
             source = TemperatureMonitorSource(args.capture, timeout=args.timeout)
         except Exception:
@@ -347,6 +378,38 @@ def main(argv=None):
             print(json.dumps({"result": "failed", "check": "temperature monitor", "reason": "monitor-stopped"}))
             return 1
         return status
+    if args.command == "monitor-common-dme":
+        if not 1 <= args.duration <= 300:
+            parser.error("duration must be between 1 and 300 seconds")
+        if not 0.1 <= args.timeout <= 5.0:
+            parser.error("timeout must be between 0.1 and 5 seconds")
+        if args.ui_host not in ("127.0.0.1", "localhost", "::1"):
+            parser.error("dashboard must bind to loopback")
+        store = None
+        try:
+            store = TelemetryStore(args.db) if args.db else None
+        except Exception:
+            if store is not None:
+                store.close()
+            print(json.dumps({"result": "failed", "check": "common DME monitor",
+                              "reason": "recording-unavailable"}))
+            return 1
+        try:
+            source = CommonDmeMonitorSource(args.capture, timeout=args.timeout,
+                                            duration=args.duration)
+        except Exception:
+            if store: store.close()
+            print(json.dumps({"result": "failed", "check": "common DME monitor",
+                              "reason": "capture-or-connection-invalid"}))
+            return 1
+        try:
+            return run_monitor(source, store=store, duration=args.duration,
+                               host=args.ui_host, port=args.port, interval=1.0,
+                               mode="common-dme-monitor", title="Common DME monitor")
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "common DME monitor",
+                              "reason": "monitor-stopped"}))
+            return 1
     if not 0.1 <= args.interval <= 10:
         parser.error("interval must be between 0.1 and 10 seconds")
     if args.command == "demo":

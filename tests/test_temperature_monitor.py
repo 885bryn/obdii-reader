@@ -446,6 +446,36 @@ class TemperatureMonitorTests(unittest.TestCase):
         with patch("builtins.print"), patch("threading.Timer", TrackingTimer):
             run_monitor(Source(), duration=1, port=0)
 
+    def test_generalized_runner_preserves_temperature_defaults(self):
+        captured = {}
+
+        class Source:
+            signals = []
+            halted = False
+            def read(self): self.halted = True; return []
+            def close(self): pass
+
+        class Server:
+            server_port = 12345
+            def __init__(self): self.stopped = threading.Event()
+            def serve_forever(self): self.stopped.wait(2)
+            def shutdown(self): self.stopped.set()
+            def server_close(self): pass
+
+        server = Server()
+
+        def serve(engine, host, port, recording, mode):
+            captured.update(engine=engine, host=host, mode=mode)
+            return server
+
+        with patch("supra_telemetry.web.serve", side_effect=serve), patch("builtins.print") as output:
+            result = run_monitor(Source(), duration=5)
+        self.assertEqual(result, 1)
+        self.assertEqual(captured["engine"].interval, INTERVAL_SECONDS)
+        self.assertEqual(captured["mode"], "temperature-monitor")
+        self.assertEqual(captured["host"], "127.0.0.1")
+        self.assertIn("Temperature monitor dashboard:", output.call_args.args[0])
+
 
 if __name__ == "__main__":
     unittest.main()

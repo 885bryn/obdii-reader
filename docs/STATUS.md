@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "offline_analysis",
+  "workflow_stage": "vehicle_validation",
   "health": "healthy",
-  "updated_at": "2026-09-27T16:55:53-07:00",
+  "updated_at": "2026-09-27T17:31:13-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,49 +23,50 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T010-1",
-      "title": "Investigate bounded DTC response mismatch offline",
-      "status": "in_progress",
-      "path": "supra_telemetry/emissions_dtcs.py"
+      "id": "T010-2",
+      "title": "Run repaired suite and bounded recorded monitor in one session",
+      "status": "ready",
+      "path": "docs/safety.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "One bounded stationary, engine-idling, PAD-off discovery-suite run completed the conditional Mode 01 inventory and four common-value phases and passed both fresh-support and stationary-plausibility gates. It then stopped fail-closed during emissions-DTC reading with response-invalid after a conservative reported total of 11 requests. Mode 09 was not attempted, there was no retry, and no raw exchange was retained.",
-    "at": "2026-09-27T16:54:00-07:00",
+    "summary": "Offline investigation produced a strict count-prefixed DTC parser, privacy-safe partial-result preservation, and a bounded four-signal stationary monitor with decoded-only recording and CSV coverage. All 94 offline tests pass, and independent medium re-review approved offline integration after two blocking edge cases were repaired.",
+    "at": "2026-09-27T17:31:00-07:00",
     "evidence": [
       "docs/PROJECT_HISTORY.md",
-      "docs/research.md",
-      "supra_telemetry/read_only_suite.py"
+      "tests/test_emissions_dtcs.py",
+      "tests/test_common_dme_monitor.py"
     ]
   },
   "next_action": {
-    "summary": "Without reconnecting to the vehicle, compare the strict emissions-DTC response parser with authoritative protocol evidence and existing transport behavior, add evidence-based fixtures or safer non-identifying diagnostics where justified, and independently review any proposed future bounded procedure. If the mismatch remains unexplained, include one manually entered Diagnostic/PAD Mode read-only comparison in the eventual consolidated session while retaining PAD-off product acceptance. Do not retry from the current result.",
-    "owner": "agent",
-    "reference": "supra_telemetry/emissions_dtcs.py"
+    "summary": "At the next convenient vehicle visit, follow the reviewed consolidated normal-mode procedure: run the repaired 20-request-maximum suite once; only after full success, run the 60-second, 60-request-maximum recorded common-DME monitor once; disconnect before CSV export. Stop all traffic on the first warning or failure. PAD Mode is not part of this session.",
+    "owner": "user",
+    "reference": "docs/safety.md"
   },
   "attention": [
-    "The privacy-safe failed run retained no raw DTC response, so the exact response shape and failing Mode 03/07/0A request cannot be reconstructed or guessed."
+    "The original failed run retained no raw DTC response or failing read label. Count-prefixed framing is evidence-based and strict but remains a vehicle-unverified hypothesis.",
+    "Mode 09, common-DME repeated acquisition, SQLite recording, and CSV content remain vehicle-unverified until the consolidated session succeeds."
   ],
   "architecture": {
     "status": "aligned",
-    "summary": "The suite remained strictly read-only, source-bound, bounded, and fail-closed in its first run: it stopped after the DTC mismatch and did not enter Mode 09. Any diagnostic improvement must preserve the fixed-request surface, privacy boundaries, and stop-on-first-failure behavior.",
+    "summary": "The repaired suite and monitor remain strictly read-only, source-bound, bounded, serialized, privacy-safe, and fail-closed. Explicit DTC framing prevents ambiguous decoding; monitor deadlines, request gates, stationary checks, and recording failures prevent later traffic.",
     "reference": "docs/architecture.md"
   },
   "verification": {
     "status": "passed",
-    "summary": "All 71 offline tests passed before the run. Empirically, the inventory and common-value phases completed and their gates passed; the DTC phase returned response-invalid; Mode 09 did not run. The controller's stop behavior matched the reviewed contract.",
-    "verified_at": "2026-09-27T16:54:00-07:00"
+    "summary": "All 94 offline tests pass. Coverage includes strict count-prefixed DTC parsing, truncated and padding failures, malicious-output redaction, safe completed summaries, fixed request order and ceilings, one-second cadence, duration races, stationary gates, loopback binding, SQLite/CSV decoded-only persistence, recording-error redaction, and unchanged temperature-monitor defaults.",
+    "verified_at": "2026-09-27T17:31:00-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium review approved the bounded first run. The empirical DTC mismatch now requires offline investigation and a fresh independent review before any future vehicle attempt."
+    "summary": "Independent medium review found ambiguous DTC framing and unredacted SQLite-construction failures. Both were repaired; focused re-review passed and approved offline integration. The count-prefixed hypothesis still requires the separately reviewed bounded vehicle session."
   },
   "integration": {
-    "status": "synchronized",
-    "summary": "The fail-closed vehicle result and its privacy-safe limitations are reconciled in the operational records for synchronization on main; no private vehicle or network identifiers or raw exchanges are included."
+    "status": "pending",
+    "summary": "The reviewed offline repairs and consolidated procedure are ready for privacy checking, commit, and synchronization on main; no private vehicle or network identifiers or raw exchanges are included."
   },
   "handoff": {
-    "summary": "The first suite run produced useful one-shot Mode 01 evidence and then stopped safely. All four common values returned exact accepted shapes and passed stationary bounds, but their exact measurements were not retained. DTC handling needs evidence-based offline analysis; Mode 09, recording, and repeated monitoring remain unverified. No further vehicle traffic is authorized from this result."
+    "summary": "The first suite run produced useful one-shot Mode 01 evidence and stopped safely at DTC parsing. Offline work now preserves safe evidence, strictly handles the likely count-prefixed DTC shape, and provides a conservative recorded common-DME monitor. The next car visit is a single normal-mode validation session; a PAD-on comparison is only a later contingency if the repair still fails."
   }
 }
 ---

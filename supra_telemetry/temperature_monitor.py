@@ -118,8 +118,10 @@ class TemperatureMonitorSource:
 
 
 def run_monitor(source, *, store=None, duration=300, host="127.0.0.1", port=8765,
+                interval=INTERVAL_SECONDS, mode="temperature-monitor",
+                title="Temperature monitor",
                 worker_join_timeout=7.0, thread_factory=threading.Thread):
-    """Serve a local dashboard for a bounded run and close all resources on expiry."""
+    """Serve a bounded local dashboard with source-specific cadence and labels."""
     from .engine import AcquisitionEngine
     from .web import serve
 
@@ -127,6 +129,10 @@ def run_monitor(source, *, store=None, duration=300, host="127.0.0.1", port=8765
         raise ValueError("dashboard must bind to loopback")
     if not 1 <= duration <= 300:
         raise ValueError("duration must be between 1 and 300 seconds")
+    if not 0.1 <= float(interval) <= 10.0:
+        raise ValueError("interval must be between 0.1 and 10 seconds")
+    if not isinstance(mode, str) or not mode or not isinstance(title, str) or not title:
+        raise ValueError("monitor labels must be non-empty strings")
     session = None
     server = None
     worker = None
@@ -159,12 +165,12 @@ def run_monitor(source, *, store=None, duration=300, host="127.0.0.1", port=8765
 
     try:
         if store:
-            session = store.start_session(utc_now(), mode="temperature-monitor")
+            session = store.start_session(utc_now(), mode=mode)
             for signal in source.signals:
                 store.register(session, signal)
         engine = AcquisitionEngine(source=source, store=store, session_id=session,
-                                   interval=INTERVAL_SECONDS)
-        server = serve(engine, host, port, bool(store), mode="temperature-monitor")
+                                   interval=interval)
+        server = serve(engine, host, port, bool(store), mode=mode)
 
         def expire():
             try:
@@ -192,7 +198,7 @@ def run_monitor(source, *, store=None, duration=300, host="127.0.0.1", port=8765
         timer.start()  # Bound the request window before the acquisition worker can send.
         worker.start()
         worker_started = True
-        print(f"Temperature monitor dashboard: http://{host}:{server.server_port}/", flush=True)
+        print(f"{title} dashboard: http://{host}:{server.server_port}/", flush=True)
         while worker.is_alive():
             worker.join(timeout=0.1)
             if engine.halted or expired.is_set():

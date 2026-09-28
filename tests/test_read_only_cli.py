@@ -84,7 +84,20 @@ class ReadOnlyCliTests(unittest.TestCase):
 
     def test_suite_failure_reports_only_safe_progress(self):
         error = SuiteError("read_emissions_dtcs", "uds-rejected", 9,
-                           ("inventory_mode01", "read_common_dme_values"))
+                           ("inventory_mode01", "read_common_dme_values"), {
+                               "inventory_mode01": {"requests_sent": 2,
+                                   "supported_pids": ["0x0C", "0x0D", "0x0F", "0x11"],
+                                   "highest_bitmap_base": "0x00",
+                                   "peer": "169.254.1.2", "raw": "VIN-SECRET"},
+                               "read_common_dme_values": {"requests_sent": 4,
+                                   "values": {
+                                       "engine_rpm": {"value": 750.0, "unit": "rpm"},
+                                       "vehicle_speed": {"value": 0.0, "unit": "km/h"},
+                                       "intake_air_temperature": {"value": 25.0, "unit": "°C"},
+                                       "throttle_position": {"value": 12.0, "unit": "%"}},
+                                   "private_field": "VIN-SECRET"},
+                           }, {"failed_read": "pending", "payload_issue": "odd-length",
+                               "completed_reads": {"stored": ["P0123"]}})
         with patch.object(cli, "run_read_only_suite", side_effect=error):
             status, result = self.invoke("collect-read-only-suite")
         self.assertEqual(status, 1)
@@ -92,8 +105,83 @@ class ReadOnlyCliTests(unittest.TestCase):
             "result": "failed", "check": cli.READ_ONLY_SUITE_CHECK,
             "failed_phase": "read_emissions_dtcs", "reason": "uds-rejected",
             "completed_phases": ["inventory_mode01", "read_common_dme_values"],
+            "completed_summaries": {"inventory_mode01": {
+                "requests_sent": 2, "supported_pids": ["0x0C", "0x0D", "0x0F", "0x11"],
+                "highest_bitmap_base": "0x00"},
+                "read_common_dme_values": {"requests_sent": 4, "values": {
+                    "engine_rpm": {"value": 750.0, "unit": "rpm"},
+                    "vehicle_speed": {"value": 0.0, "unit": "km/h"},
+                    "intake_air_temperature": {"value": 25.0, "unit": "°C"},
+                    "throttle_position": {"value": 12.0, "unit": "%"}}}},
+            "dtc_failure": {"read": "pending", "completed_reads": {
+                                "stored": {"dtcs": ["P0123"], "count": 1}},
+                            "payload_issue": "odd-length"},
             "total_requests": 9,
         })
+        self.assertNotIn("VIN-SECRET", json.dumps(result))
+
+    def test_direct_dtc_cli_failure_includes_only_fixed_structure(self):
+        error = EmissionsDtcError("response-invalid", 2, failed_read="pending",
+                                  payload_issue="odd-length",
+                                  completed_reads={"stored": ["P0123"]})
+        with patch.object(cli, "read_emissions_dtcs", side_effect=error):
+            status, result = self.invoke("read-emissions-dtcs")
+        self.assertEqual(status, 1)
+        self.assertEqual(result["dtc_failure"], {
+            "read": "pending", "completed_reads": {
+                "stored": {"dtcs": ["P0123"], "count": 1}},
+            "payload_issue": "odd-length"})
+        self.assertEqual(result["requests_sent"], 2)
+        self.assertNotIn("bytes", json.dumps(result))
+
+    def test_common_dme_monitor_cli_wires_capture_timeout_duration_and_safe_runner_mode(self):
+        source = object()
+        with patch.object(cli, "CommonDmeMonitorSource", return_value=source) as source_factory, \
+                patch.object(cli, "run_monitor", return_value=0) as runner:
+            status = cli.main(["monitor-common-dme", "--capture", "private.json",
+                               "--duration", "42", "--timeout", "1.5", "--port", "0"])
+        self.assertEqual(status, 0)
+        source_factory.assert_called_once_with("private.json", timeout=1.5, duration=42)
+        self.assertEqual(runner.call_args.args[0], source)
+        self.assertIsNone(runner.call_args.kwargs["store"])
+        self.assertEqual(runner.call_args.kwargs["duration"], 42)
+        self.assertEqual(runner.call_args.kwargs["interval"], 1.0)
+        self.assertEqual(runner.call_args.kwargs["mode"], "common-dme-monitor")
+        self.assertEqual(runner.call_args.kwargs["title"], "Common DME monitor")
+        self.assertEqual(runner.call_args.kwargs["host"], "127.0.0.1")
+
+    def test_common_dme_monitor_cli_enforces_duration_timeout_and_loopback(self):
+        invalid = (("--duration", "0"), ("--duration", "301"),
+                   ("--timeout", "0"), ("--timeout", "5.1"),
+                   ("--ui-host", "0.0.0.0"))
+        for option, value in invalid:
+            with self.subTest(option=option, value=value), \
+                    patch.object(cli, "CommonDmeMonitorSource") as source_factory:
+                with self.assertRaises(SystemExit):
+                    cli.main(["monitor-common-dme", "--capture", "private.json", option, value])
+                source_factory.assert_not_called()
+
+    def test_monitor_database_open_failures_are_redacted_and_prevent_source_creation(self):
+        private_path = "C:/private/vehicle capture.sqlite"
+        private_error = f"cannot open {private_path}: private driver detail"
+        cases = (
+            ("monitor-temperatures", "temperature monitor", "TemperatureMonitorSource"),
+            ("monitor-common-dme", "common DME monitor", "CommonDmeMonitorSource"),
+        )
+        for command, check, source_name in cases:
+            with self.subTest(command=command), \
+                    patch.object(cli, "TelemetryStore", side_effect=OSError(private_error)), \
+                    patch.object(cli, source_name) as source_factory:
+                output = io.StringIO()
+                with contextlib.redirect_stdout(output):
+                    status = cli.main([command, "--capture", "private-capture.json",
+                                       "--db", private_path])
+                self.assertEqual(status, 1)
+                self.assertEqual(json.loads(output.getvalue()), {
+                    "result": "failed", "check": check, "reason": "recording-unavailable"})
+                self.assertNotIn(private_path, output.getvalue())
+                self.assertNotIn("private driver detail", output.getvalue())
+                source_factory.assert_not_called()
 
 
 if __name__ == "__main__":

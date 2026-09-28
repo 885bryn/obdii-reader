@@ -99,15 +99,25 @@ The separately bounded common-DME support check is:
 python -m supra_telemetry verify-common-dme-support --capture captures/discovery.json
 ```
 
-It uses the same source-bound, previously verified DME route and sends exactly one `01 00` bitmap request. It reports whether the DME advertises RPM PID 0C, vehicle speed PID 0D, intake-air-temperature PID 0F, and throttle-position PID 11, plus a conservative request count. It never requests those values, retries, scans, polls, changes session, sends tester-present, writes, actuates, or persists the exchange. The implementation passed 42 offline tests and independent review. On 2026-09-27, the command ran once on the stationary vehicle with the engine off and PAD/Diagnostic Mode off; its single reported request advertised all four candidate PIDs and exited successfully. This establishes support bits only, not plausible values or safe polling. Do not repeat it merely to reconfirm the result. The next vehicle action must wait for a separately implemented and reviewed bounded value-read procedure.
+It uses the same source-bound, previously verified DME route and sends exactly one `01 00` bitmap request. It reports whether the DME advertises RPM PID 0C, vehicle speed PID 0D, intake-air-temperature PID 0F, and throttle-position PID 11, plus a conservative request count. It never requests those values, retries, scans, polls, changes session, sends tester-present, writes, actuates, or persists the exchange. The implementation passed 42 offline tests and independent review. On 2026-09-27, the command ran once on the stationary vehicle with the engine off and PAD/Diagnostic Mode off; its single reported request advertised all four candidate PIDs and exited successfully. This establishes support bits only, not plausible values or safe polling. Do not repeat it merely to reconfirm the result. The next vehicle action is the reviewed consolidated session documented below and in `docs/safety.md`; do not run the support check separately first.
 
-That next information-gathering procedure is now offline-implemented as:
+The consolidated information-gathering procedure is:
 
 ```powershell
 python -m supra_telemetry collect-read-only-suite --capture captures/discovery.json
 ```
 
-The one reviewed vehicle run occurred on 2026-09-27 with the car stationary, engine idling normally, and PAD/Diagnostic Mode off. Inventory and the four common-value reads completed, and the fresh-support and stationary-plausibility gates passed. DTC reading then returned the fixed `response-invalid` category; the controller stopped before Mode 09 after reporting a conservative total of 11 requests. No raw exchange was retained, so the exact response shape cannot be reconstructed from that run. Do not retry it or run a DTC subset until offline investigation produces a separately reviewed bounded procedure. Mode 09 remains untested on the vehicle.
+The first reviewed vehicle run occurred on 2026-09-27 with the car stationary, engine idling normally, and PAD/Diagnostic Mode off. Inventory and the four common-value reads completed, and the fresh-support and stationary-plausibility gates passed. DTC reading then returned `response-invalid`; the controller stopped before Mode 09 after reporting a conservative total of 11 requests. The old parser and fixed failure category narrow this to an expected positive DTC service with an odd post-service payload, but no raw response or failing DTC read was retained.
+
+Offline evidence now supports a count-prefixed ISO 15765-style DTC shape. The repaired parser requires that shape explicitly, validates its declared count, rejects non-trailing zero padding and truncated or ambiguous payloads, and does not fall back to pair-only framing. Suite failures now retain strictly allowlisted completed values, PID inventory, earlier decoded DTC results, fixed structural categories, and counts. The repaired suite and Mode 09 remain vehicle-unverified.
+
+The next vehicle visit is one consolidated normal-mode session, not a sequence of ad-hoc trips. With the car stationary outdoors, in Park, engine idling without throttle input, PAD off, stable ENET, and no warnings, run the suite exactly once. If it fails, stop all vehicle traffic. Only after full suite success, wait at least ten seconds and run:
+
+```powershell
+python -m supra_telemetry monitor-common-dme --capture captures/discovery.json --duration 60 --db recordings/common-dme.sqlite --port 0
+```
+
+That monitor starts at most 60 fixed Mode 01 requests, at least one second apart, applies the stationary bounds to every value, serves only on loopback, and records decoded samples without raw exchanges. After it exits, turn the car off and disconnect before exporting `recordings/common-dme.sqlite` to an ignored CSV. The combined session ceiling is 80 requests. A PAD-on DTC comparison remains a separately reviewed fallback only if the count-prefixed repair fails; it is not performed after a failure in this session.
 
 The already completed temperature support check verified both temperature PIDs on this vehicle, so its separate optional value check is available as:
 

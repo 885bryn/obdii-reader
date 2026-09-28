@@ -8,6 +8,8 @@
 - DoIP discovery announcement parsing accepts protocol versions 0x02/0x03 with matching inverse byte, validates the ISO 13400 field structure/payload length, and uses one absolute deadline. It does not establish a diagnostic route.
 - The offline-tested read-only discovery suite uses only the verified capture-bound DME route. Its fixed phases are capped at 8 conditional Mode 01 bitmap reads, 4 common-value reads, 3 emissions-DTC reads, and 5 Mode 09 requests, with a total ceiling of 20 and stop-on-first-failure behavior. This is software verification, not vehicle evidence.
 - SAE J1979 and official CARB material identify Mode 03/07/0A as confirmed, pending, and permanent emissions-DTC reads; Mode 04 is clear/reset and remains prohibited. CARB material identifies Mode 09 InfoTypes 02, 04, 06, and 0A as VIN, calibration ID, CVN, and ECU name. The public sources establish standardized meanings, not support on this vehicle or proprietary ECU topology.
+- Elm Electronics' ELM327 documentation states that ISO 15765-4 DTC responses add a count byte after the positive service. The repaired live DTC parser therefore requires that count-prefixed shape on this empirically odd-payload route, validates the count, permits only trailing zero-pair padding, and rejects truncated or ambiguous shapes. This is an evidence-based software hypothesis pending bounded vehicle verification.
+- The common-DME monitor and failure-evidence paths passed independent offline review. Every common-monitor request start is separated by at least one second, the 1–300 second duration also caps attempts, every decoded value is checked against stationary bounds, SQLite/CSV contain no raw exchanges, and fixed failure output is rebuilt from allowlisted decoded fields.
 
 ## Verified by vehicle testing
 
@@ -20,20 +22,21 @@
 - `verify-temperature-support` reported coolant PID 05 and engine-oil-temperature PID 5C supported. A separate `read-temperature-values` one-shot read returned both values, including in normal engine-running mode without PAD/Diagnostic Mode.
 - One `monitor-temperatures` run completed for 300 seconds on 2026-09-26 in normal engine-running mode without PAD/Diagnostic Mode. Logging was off; it exited cleanly with no observed acquisition or recording error. Approximate completed-pair rate was 0.49–0.50 per second. This verifies only that bounded run.
 - On 2026-09-27, `verify-common-dme-support` completed once on the stationary vehicle with the engine off and PAD/Diagnostic Mode off. Its single Mode 01 PID `00` request reported advertised support for engine RPM PID `0C`, vehicle speed PID `0D`, intake-air-temperature PID `0F`, and throttle-position PID `11`, then exited successfully. This verifies support bits only, not value behavior or polling safety.
-- Later on 2026-09-27, one reviewed stationary, engine-idling, PAD-off `collect-read-only-suite` run completed its conditional Mode 01 inventory and four common-value phases. All four exact value responses were accepted and the reviewed stationary gate passed. The DTC phase then stopped fail-closed with `response-invalid` after the command reported a conservative total of 11 requests. Mode 09 was not attempted, there was no retry, and no raw exchange was persisted. This verifies only the completed phases and stop behavior; it does not identify which DTC response shape failed.
+- Later on 2026-09-27, one reviewed stationary, engine-idling, PAD-off `collect-read-only-suite` run completed its conditional Mode 01 inventory and four common-value phases. All four exact value responses were accepted and the reviewed stationary gate passed. The DTC phase then stopped fail-closed with `response-invalid` after the command reported a conservative total of 11 requests. Mode 09 was not attempted, there was no retry, and no raw exchange was persisted. The old code path narrows the failure to an expected positive DTC service followed by an odd-length payload, but it does not retain the exact bytes or identify which fixed DTC read failed.
 - Staged USB isolation left the Ethernet adapter healthy alone and with ENET, and the link remained up during the successful normal-mode read. The earlier Windows Code 43 / Port Reset Failed event is therefore classified as a laptop USB enumeration/reset incident, not evidence that PAD or a different vehicle protocol is required.
 
 ## Inferred
 
 - The observed HSFZ identification response confirms an ENET/HSFZ discovery path on the tested vehicle. It does not establish that the responding peer accepts the application's TCP diagnostic framing or reveal ECU topology, target addresses, session needs, or supported data.
 - Standard SAE PIDs are worth trying only after connection and ECU support are confirmed.
+- The old pair-only DTC parser and the observed odd post-service payload are consistent with a count-prefixed response. This inference is supported by the ELM327 ISO 15765 description, but the HSFZ route's actual framing remains empirical until the repaired parser succeeds on the vehicle.
 
 ## Unknown / empirical
 
 - Behavior beyond the single 300-second monitor run and monitor behavior with recording enabled.
 - DME session requirements, battery-support limits, vehicle request limits beyond the observed bounded cadence, and HSFZ keep-alive requirements.
 - Exact observed values, useful ranges, and safe repeated-acquisition cadence for PIDs `0C`, `0D`, `0F`, and `11`; their first one-shot response set passed the bounded stationary gate, while transmission/chassis signals remain unverified.
-- The precise DTC response shape that caused `response-invalid`, whether later Mode 03/07/0A reads would succeed, and all vehicle behavior for the privacy-redacted Mode 09 information check. No raw failed response was retained and Mode 09 did not run.
+- The exact retained bytes and failing Mode 03/07/0A read from the first DTC failure, whether the strict count-prefixed repair succeeds, and all vehicle behavior for the privacy-redacted Mode 09 information check. No raw failed response was retained and Mode 09 did not run.
 - DoIP routing and support. The bounded discovery attempt saw no DoIP announcement, and live DoIP routing is not implemented.
 
 ## References
@@ -59,6 +62,7 @@ The optional `verify-dme` check makes a distinct single VIN read through candida
 - California BAR OBD inspection data-acquisition specification (official Mode 03/07/0A and Mode 09 acquisition requirements): https://bar.ca.gov/pdf/publications/DAD-2012.pdf
 - CARB remote OBD specification mapping standardized DTC and Mode 09 information requests: https://ww2.arb.ca.gov/sites/default/files/classic/msprog/hdim/meetings/20201116_hdim_workgroup_robd_spec.pdf
 - Toyota owner information on OBD data and software identifiers: https://www.toyota.com/owners/iumpr/
+- Elm Electronics ELM327 datasheet, including the ISO 15765-4 DTC count-byte note: https://www.elmelectronics.com/wp-content/uploads/2016/07/ELM327DSH.pdf
 
 These references provide protocol background only. Community HSFZ reports should be treated as provisional until independently corroborated. Toyota documentation confirms a Supra-specific diagnostic cable and Toyota ISTA requirement, not raw ENET host configuration, HSFZ addressing, ECU DIDs, or signal availability. The initial vehicle capture confirms only the bounded HSFZ identification exchange described above.
 

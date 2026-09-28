@@ -8,7 +8,8 @@ from pathlib import Path
 
 from supra_telemetry.dme_check import DME_TARGET_ADDRESS
 from supra_telemetry.emissions_dtcs import (
-    CHECK_NAME, EmissionsDtcError, decode_dtc, parse_dtc_payload, read_emissions_dtcs,
+    CHECK_NAME, EmissionsDtcError, _parse_counted_dtc_payload, decode_dtc,
+    parse_counted_dtc_payload, parse_dtc_payload, read_emissions_dtcs,
 )
 from supra_telemetry.hsfz import HsfzClient, encode_frame, recv_frame
 from supra_telemetry.safety import SafetyPolicy, UnsafeRequest
@@ -31,16 +32,48 @@ class EmissionsDtcTests(unittest.TestCase):
         self.assertEqual([decode_dtc(n) for n in (0x0123, 0x4123, 0x8123, 0xC123)],
                          ["P0123", "C0123", "B0123", "U0123"])
         self.assertEqual(parse_dtc_payload(b""), [])
-        self.assertEqual(parse_dtc_payload(bytes.fromhex("00000123 0000 C123")), ["P0123", "U0123"])
+        self.assertEqual(parse_dtc_payload(bytes.fromhex("0123 C123 0000 0000")),
+                         ["P0123", "U0123"])
+        with self.assertRaises(ValueError) as malformed_pairs:
+            parse_dtc_payload(bytes.fromhex("0123 0000 C123"))
+        self.assertEqual(malformed_pairs.exception.issue, "invalid-shape")
+
+    def test_count_prefixed_payloads_validate_count_and_preserve_zero_padding(self):
+        self.assertEqual(parse_counted_dtc_payload(bytes.fromhex("01 0123")), ["P0123"])
+        self.assertEqual(parse_counted_dtc_payload(bytes.fromhex("02 0123 C123 0000")),
+                         ["P0123", "U0123"])
+        self.assertEqual(parse_counted_dtc_payload(bytes.fromhex("00")), [])
+        self.assertEqual(parse_counted_dtc_payload(bytes.fromhex("00 0000 0000")), [])
+        with self.assertRaises(ValueError) as mismatch:
+            parse_counted_dtc_payload(bytes.fromhex("02 0123"))
+        self.assertEqual(mismatch.exception.issue, "count-mismatch")
+        with self.assertRaises(ValueError) as zero_with_code:
+            parse_counted_dtc_payload(bytes.fromhex("00 0123"))
+        self.assertEqual(zero_with_code.exception.issue, "count-mismatch")
+        with self.assertRaises(ValueError) as malformed_counted_pairs:
+            parse_counted_dtc_payload(bytes.fromhex("02 0123 0000 C123"))
+        self.assertEqual(malformed_counted_pairs.exception.issue, "invalid-shape")
+        for truncated_or_extra in (bytes.fromhex("01 01"), bytes.fromhex("01 0123 00")):
+            with self.subTest(payload=truncated_or_extra), self.assertRaises(ValueError) as malformed:
+                parse_counted_dtc_payload(truncated_or_extra)
+            self.assertEqual(malformed.exception.issue, "invalid-shape")
+        # Pair-only bytes cannot be silently accepted as counted live framing.
+        with self.assertRaises(ValueError) as wrong_framing:
+            parse_counted_dtc_payload(bytes.fromhex("0123"))
+        self.assertEqual(wrong_framing.exception.issue, "invalid-shape")
         with self.assertRaises(ValueError):
-            parse_dtc_payload(b"\x01")
+            parse_dtc_payload(bytearray(b"\x01"))
+        for count in (True, -1, 256, "1"):
+            with self.subTest(count=count), self.assertRaises(ValueError):
+                _parse_counted_dtc_payload(count, b"")
 
     def test_exact_single_ordered_requests_captured_route_and_redacted_values(self):
         with tempfile.TemporaryDirectory() as directory:
             path = private_capture(directory)
             left, right = socket.socketpair()
             seen = []
-            responses = (b"\x43\x01\x23\x00\x00", b"\x47\x41\x23", b"\x4a\xc1\x23")
+            responses = (b"\x43\x01\x01\x23\x00\x00",
+                         b"\x47\x01\x41\x23", b"\x4a\x01\xc1\x23")
 
             def ecu():
                 for response in responses:
@@ -100,9 +133,71 @@ class EmissionsDtcTests(unittest.TestCase):
                     read_emissions_dtcs(path, client_factory=lambda *_a, **_k: client)
                 self.assertEqual(raised.exception.reason, reason)
                 self.assertEqual(raised.exception.requests_sent, 1)
+                if outcome == b"\x43\x01":
+                    self.assertEqual(raised.exception.failed_read, "stored")
+                    self.assertEqual(raised.exception.payload_issue, "count-mismatch")
+                    self.assertEqual(str(raised.exception), "response-invalid")
                 self.assertEqual(client.calls, [b"\x03"])
                 self.assertTrue(client.closed)
                 self.assertNotIn("private", str(raised.exception))
+
+    def test_partial_failure_preserves_only_prior_decoded_reads(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = private_capture(directory)
+
+            class Client:
+                def __init__(self):
+                    self.calls = []
+                    self.responses = [b"\x43\x01\x01\x23", b"\x47\x02\x01\x23"]
+
+                def request(self, payload):
+                    self.calls.append(payload)
+                    return self.responses.pop(0)
+
+                def close(self):
+                    pass
+
+            client = Client()
+            with self.assertRaises(EmissionsDtcError) as caught:
+                read_emissions_dtcs(path, client_factory=lambda *_a, **_k: client)
+            self.assertEqual(client.calls, [b"\x03", b"\x07"])
+            self.assertEqual(caught.exception.failed_read, "pending")
+            self.assertEqual(caught.exception.payload_issue, "count-mismatch")
+            self.assertEqual(caught.exception.completed_reads, {"stored": ["P0123"]})
+
+    def test_live_path_rejects_pair_only_looking_truncated_counted_response(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = private_capture(directory)
+
+            class Client:
+                def __init__(self):
+                    self.calls = []
+
+                def request(self, payload):
+                    self.calls.append(payload)
+                    # Pair-only interpretation would decode this as P0101.
+                    return b"\x43\x01\x01"
+
+                def close(self):
+                    pass
+
+            client = Client()
+            with self.assertRaises(EmissionsDtcError) as caught:
+                read_emissions_dtcs(path, client_factory=lambda *_a, **_k: client)
+            self.assertEqual(client.calls, [b"\x03"])
+            self.assertEqual(caught.exception.reason, "response-invalid")
+            self.assertEqual(caught.exception.payload_issue, "invalid-shape")
+
+    def test_error_constructor_rejects_malicious_completed_reads(self):
+        for invalid in (
+                {"stored": ["VIN-SECRET"]},
+                {"pending": ["P0123"]},
+                {"stored": ["P0123"], "pending": ["P0123"]},
+                {"stored": ["P0123", object()]},
+                ["P0123"]):
+            error = EmissionsDtcError("response-invalid", 2, failed_read="pending",
+                                      completed_reads=invalid)
+            self.assertEqual(error.completed_reads, {})
 
     def test_policy_allows_only_single_byte_dtc_reads_and_correlates_services(self):
         policy = SafetyPolicy()

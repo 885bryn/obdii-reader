@@ -18,6 +18,7 @@ class ReadOnlySuiteTests(unittest.TestCase):
             extra = {"phase": name}
             if name == "inventory":
                 extra["supported_pids"] = ["0x0C", "0x0D", "0x0F", "0x11"]
+                extra["highest_bitmap_base"] = "0x00"
             if name == "values":
                 extra["values"] = {
                     "engine_rpm": {"value": 750.0, "unit": "rpm"},
@@ -89,9 +90,86 @@ class ReadOnlySuiteTests(unittest.TestCase):
         self.assertEqual(error.reason, "uds-rejected")
         self.assertEqual(error.total_requests, 4)
         self.assertEqual(error.completed_phases, ("inventory_mode01",))
+        self.assertEqual(error.completed_summaries, {
+            "inventory_mode01": {"requests_sent": 2,
+                                 "supported_pids": ["0x0C", "0x0D", "0x0F", "0x11"],
+                                 "highest_bitmap_base": "0x00"},
+        })
         self.assertEqual([name for name, _, _ in self.calls], ["inventory", "values"])
         self.assertEqual(self.waits, [2.0])
         self.assertNotIn("private response", str(error))
+
+    def test_completed_summaries_are_rebuilt_from_allowlisted_fields(self):
+        phases = self.dependencies((2, 4, 3, 5))
+        phases[2] = lambda *_args: (_ for _ in ()).throw(type("Failure", (Exception,), {
+            "reason": "response-invalid", "requests_sent": 1,
+            "failed_read": "pending", "payload_issue": "odd-length",
+            "completed_reads": {"stored": ["P0123"]},
+        })("VIN-SECRET"))
+        original_inventory = phases[0]
+        original_values = phases[1]
+        def malicious_inventory(path, timeout):
+            value = original_inventory(path, timeout)
+            value.update(peer="169.254.1.2", raw="PRIVATE", supported_pids_extra="secret")
+            return value
+        def malicious_values(path, timeout):
+            value = original_values(path, timeout)
+            value["values"]["private"] = {"value": "VIN-SECRET", "unit": "secret"}
+            return value
+        phases[0], phases[1] = malicious_inventory, malicious_values
+        with self.assertRaises(SuiteError) as caught:
+            self.run_suite(phases)
+        error = caught.exception
+        self.assertEqual(error.failed_read, "pending")
+        self.assertEqual(error.payload_issue, "odd-length")
+        self.assertEqual(error.dtc_completed_reads, {
+            "stored": {"dtcs": ["P0123"], "count": 1}})
+        self.assertEqual(error.completed_summaries, {
+            "inventory_mode01": {"requests_sent": 2,
+                                 "supported_pids": ["0x0C", "0x0D", "0x0F", "0x11"],
+                                 "highest_bitmap_base": "0x00"},
+        })
+        self.assertNotIn("VIN-SECRET", repr(error.completed_summaries))
+        self.assertEqual([name for name, _, _ in self.calls], ["inventory", "values"])
+
+    def test_suite_error_rejects_malicious_completed_summary_fields(self):
+        error = SuiteError("read_emissions_dtcs", "response-invalid", 9,
+                           ("inventory_mode01",), {
+                               "inventory_mode01": {"requests_sent": 2,
+                                   "supported_pids": ["0x0C"],
+                                   "highest_bitmap_base": "0x00",
+                                   "peer": "169.254.1.2", "raw": "VIN-SECRET"},
+                           }, {"failed_read": "pending", "payload_issue": "raw",
+                               "completed_reads": {"stored": ["VIN-SECRET"]}})
+        self.assertEqual(error.completed_summaries, {
+            "inventory_mode01": {"requests_sent": 2, "supported_pids": ["0x0C"],
+                                 "highest_bitmap_base": "0x00"},
+        })
+        self.assertEqual(error.failed_read, "pending")
+        self.assertIsNone(error.payload_issue)
+
+    def test_suite_error_preserves_count_mismatch_category(self):
+        error = SuiteError("read_emissions_dtcs", "response-invalid", 9,
+                           ("inventory_mode01", "read_common_dme_values"), {},
+                           {"failed_read": "stored", "payload_issue": "count-mismatch",
+                            "completed_reads": {}})
+        self.assertEqual(error.failed_read, "stored")
+        self.assertEqual(error.payload_issue, "count-mismatch")
+        self.assertEqual(error.dtc_completed_reads, {})
+        self.assertEqual(error.dtc_completed_reads, {})
+
+    def test_vehicle_info_summary_preserves_vin_support_and_match_states(self):
+        for info, expected in (
+                ({"vin_match_supported": False}, {"vin_match_supported": False}),
+                ({"vin_match_supported": True, "vin_match": True},
+                 {"vin_match_supported": True, "vin_match": True})):
+            with self.subTest(info=info):
+                error = SuiteError("verify_vehicle_info", "response-invalid", 5,
+                                   ("verify_vehicle_info",), {
+                                       "verify_vehicle_info": {"requests_sent": 5, **info,
+                                           "raw": "VIN-SECRET"}})
+                self.assertEqual(error.completed_summaries["verify_vehicle_info"],
+                                 {"requests_sent": 5, **expected})
 
     def test_invalid_child_request_counts_fail_closed(self):
         for invalid in (True, -1, 9, 1.5, "1", None):

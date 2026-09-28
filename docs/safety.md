@@ -21,15 +21,15 @@ Diagnostic/PAD Mode is permitted only as a manually entered vehicle state for bo
 11. Do not activate generic profile-driven live `run` until routing and every request are reviewed against authoritative documentation and empirically shown to be read-only. Any transport, protocol, negative-response, or decoder error halts all later requests. Inspect the cause before starting a fresh run; in-process resume is not supported.
 12. Check that data remains plausible while stationary. For the consolidated engine-running check, vehicle speed must remain 0 km/h, RPM must be consistent with idle, intake-air temperature must be physically plausible, and throttle must remain within 0–100%; these are assessment expectations, not prior empirical verification. End the session, disconnect cleanly, and inspect results before increasing scope or rate.
 
-## Current vehicle hold
+## Current vehicle authorization
 
-The second consolidated normal-mode run has ended. The first failure correctly ended all vehicle traffic, so the monitor and Mode 09 remain unverified. The vehicle may remain off and disconnected; there is no currently approved vehicle command.
+The second consolidated normal-mode run has ended. The first failure correctly ended all vehicle traffic, so the monitor and Mode 09 remain unverified and unapproved. Apart from the single conditional PAD comparison below, the vehicle may remain off and disconnected and no other vehicle command is approved.
 
-Offline preparation and independent review are complete for a minimal read-only DTC comparison in manually entered PAD/Diagnostic Mode using only the already verified route and fixed Mode 03/07/0A reads. Do not enter PAD Mode or run the command until the reviewed code and procedure are synchronized. Toyota's published PAD instruction applies to its specific ISTA transport-mode deletion procedure and does not by itself establish that generic DTC reading requires PAD Mode.
+Offline preparation and independent review are complete for a minimal read-only DTC comparison in manually entered PAD/Diagnostic Mode using only the already verified route and fixed Mode 03/07/0A reads. Implementation commit `ab599d2` is synchronized; exactly one run of the command below is approved when every listed prerequisite is satisfied. No other vehicle command is approved. Toyota's published PAD instruction applies to its specific ISTA transport-mode deletion procedure and does not by itself establish that generic DTC reading requires PAD Mode.
 
 ## Reviewed manual PAD DTC comparison
 
-The implementation, tests, documentation, and independent review are complete; the command remains on hold until the reviewed commit is synchronized. Its sole purpose is to determine whether manually entered PAD/Diagnostic Mode changes the permanent Mode 0A rejection observed during the prior normal-mode run. The historical normal-mode result was no stored DTC, pending `P0420`, and rejection of the permanent read. The comparison does not diagnose `P0420`, prove that PAD is required, or provide product-acceptance evidence.
+The implementation, tests, documentation, independent review, and synchronization are complete. Its sole purpose is to determine whether manually entered PAD/Diagnostic Mode changes the permanent Mode 0A rejection observed during the prior normal-mode run. The historical normal-mode result was no stored DTC, pending `P0420`, and rejection of the permanent read. The comparison does not diagnose `P0420`, prove that PAD is required, or provide product-acceptance evidence.
 
 Before the one candidate run:
 

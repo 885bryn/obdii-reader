@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "vehicle_validation",
   "health": "healthy",
-  "updated_at": "2026-09-27T17:31:13-07:00",
+  "updated_at": "2026-09-27T17:35:43-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -62,8 +62,8 @@
     "summary": "Independent medium review found ambiguous DTC framing and unredacted SQLite-construction failures. Both were repaired; focused re-review passed and approved offline integration. The count-prefixed hypothesis still requires the separately reviewed bounded vehicle session."
   },
   "integration": {
-    "status": "pending",
-    "summary": "The reviewed offline repairs and consolidated procedure are ready for privacy checking, commit, and synchronization on main; no private vehicle or network identifiers or raw exchanges are included."
+    "status": "synchronized",
+    "summary": "The reviewed offline repairs and consolidated procedure were privacy-checked, committed, and synchronized on main; no private vehicle or network identifiers or raw exchanges are included."
   },
   "handoff": {
     "summary": "The first suite run produced useful one-shot Mode 01 evidence and stopped safely at DTC parsing. Offline work now preserves safe evidence, strictly handles the likely count-prefixed DTC shape, and provides a conservative recorded common-DME monitor. The next car visit is a single normal-mode validation session; a PAD-on comparison is only a later contingency if the repair still fails."

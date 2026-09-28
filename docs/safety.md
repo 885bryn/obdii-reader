@@ -33,15 +33,20 @@ previously allowed permanent `service-not-supported` result. No raw exchange was
 persisted. This establishes only that bounded run and does not approve a retry,
 client demonstration, or higher request rate. The faster candidate passed all
 117 offline tests, independent medium review, and fresh independent verification.
-Independent review approved the exact 30-second procedure below. Exactly one
-stationary normal-mode validation run is now authorized under that procedure. No
-retry, longer run, second dashboard run, or other vehicle command is authorized.
+Independent review approved the exact 30-second procedure below, and its one
+authorized stationary normal-mode run has now completed with exit code 0. The
+operator reported no vehicle warning; the application reported no acquisition
+error, and no retry or second command occurred. The dashboard did not persist an
+end-of-run rate summary, so this result does not prove the achieved display rate.
+**No vehicle command is currently authorized.**
 
-## Authorized faster-cadence validation
+## Completed faster-cadence validation
 
-This procedure authorizes one stationary 30-second candidate run of the reviewed
-faster scheduler. `docs/STATUS.md` records independent approval. A clean result would verify only this short run; it
-would not authorize a retry, a 300-second run, or a client demonstration.
+This procedure authorized one stationary 30-second candidate run of the reviewed
+faster scheduler. That run is complete. The procedure is retained as historical
+evidence only and is no longer authorization to run the command. Its clean result
+verifies only this short bounded session; it does not authorize a retry, a
+300-second run, or a client demonstration.
 
 Before the candidate run:
 
@@ -57,7 +62,7 @@ Before the candidate run:
    review approves this exact procedure. Do not begin if the adapter, capture,
    vehicle state, battery condition, or procedure status is uncertain.
 
-Run exactly once:
+The historical one-time command was:
 
 ```powershell
 python -m supra_telemetry client-dashboard --mode live --capture captures/discovery.json --duration 30

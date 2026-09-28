@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "vehicle_validation",
+  "workflow_stage": "offline_analysis",
   "health": "healthy",
-  "updated_at": "2026-09-27T16:51:57-07:00",
+  "updated_at": "2026-09-27T16:55:53-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -17,53 +17,55 @@
       "path": "docs/roadmap.md"
     },
     "milestone": {
-      "id": "M009",
-      "title": "Common DME live sensors",
+      "id": "M010",
+      "title": "Read-only fault diagnostics",
       "status": "in_progress",
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-3",
-      "title": "Run bounded DME read-only discovery suite",
-      "status": "ready",
-      "path": "supra_telemetry/read_only_suite.py"
+      "id": "T010-1",
+      "title": "Investigate bounded DTC response mismatch offline",
+      "status": "in_progress",
+      "path": "supra_telemetry/emissions_dtcs.py"
     }
   },
   "latest_accomplishment": {
-    "summary": "One bounded common-DME support check completed on the stationary vehicle with the engine off and Diagnostic/PAD Mode off. Its single Mode 01 PID 00 request reported advertised support for engine RPM PID 0C, vehicle speed PID 0D, intake-air-temperature PID 0F, and throttle-position PID 11, then exited successfully.",
-    "at": "2026-09-27T16:27:00-07:00",
+    "summary": "One bounded stationary, engine-idling, PAD-off discovery-suite run completed the conditional Mode 01 inventory and four common-value phases and passed both fresh-support and stationary-plausibility gates. It then stopped fail-closed during emissions-DTC reading with response-invalid after a conservative reported total of 11 requests. Mode 09 was not attempted, there was no retry, and no raw exchange was retained.",
+    "at": "2026-09-27T16:54:00-07:00",
     "evidence": [
       "docs/PROJECT_HISTORY.md",
-      "supra_telemetry/common_dme_support.py",
-      "tests/test_common_dme_signals.py"
+      "docs/research.md",
+      "supra_telemetry/read_only_suite.py"
     ]
   },
   "next_action": {
-    "summary": "With the vehicle stationary outdoors, parking brake set, transmission in Park, engine idling without throttle input, PAD/Diagnostic Mode off, stable ENET, and no warnings, run the reviewed collect-read-only-suite command once. Stop immediately on any warning or failed phase and do not retry.",
-    "owner": "user",
-    "reference": "docs/safety.md"
+    "summary": "Without reconnecting to the vehicle, compare the strict emissions-DTC response parser with authoritative protocol evidence and existing transport behavior, add evidence-based fixtures or safer non-identifying diagnostics where justified, and independently review any proposed future bounded procedure. If the mismatch remains unexplained, include one manually entered Diagnostic/PAD Mode read-only comparison in the eventual consolidated session while retaining PAD-off product acceptance. Do not retry from the current result.",
+    "owner": "agent",
+    "reference": "supra_telemetry/emissions_dtcs.py"
   },
-  "attention": [],
+  "attention": [
+    "The privacy-safe failed run retained no raw DTC response, so the exact response shape and failing Mode 03/07/0A request cannot be reconstructed or guessed."
+  ],
   "architecture": {
     "status": "aligned",
-    "summary": "The reviewed suite remains strictly read-only, fail-closed, source-bound to the private discovery capture, and limited to the verified DME route and standardized requests. It rechecks support, applies stationary plausibility gates, stops later phases on first failure, and never exposes a raw request surface.",
+    "summary": "The suite remained strictly read-only, source-bound, bounded, and fail-closed in its first run: it stopped after the DTC mismatch and did not enter Mode 09. Any diagnostic improvement must preserve the fixed-request surface, privacy boundaries, and stop-on-first-failure behavior.",
     "reference": "docs/architecture.md"
   },
   "verification": {
     "status": "passed",
-    "summary": "All 71 offline tests pass. They cover exact request order and ceilings, source binding, response parsing, privacy redaction, prohibited clear/control services, fresh support and stationary plausibility gates, two-second warning windows, and stop-on-first-failure behavior. The new vehicle responses remain unverified.",
-    "verified_at": "2026-09-27T16:50:00-07:00"
+    "summary": "All 71 offline tests passed before the run. Empirically, the inventory and common-value phases completed and their gates passed; the DTC phase returned response-invalid; Mode 09 did not run. The controller's stop behavior matched the reviewed contract.",
+    "verified_at": "2026-09-27T16:54:00-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium review approved the final bounded suite for its first vehicle run after support-first and stationary plausibility gates were added. No remaining substantive blocker was found."
+    "summary": "Independent medium review approved the bounded first run. The empirical DTC mismatch now requires offline investigation and a fresh independent review before any future vehicle attempt."
   },
   "integration": {
     "status": "synchronized",
-    "summary": "The offline-verified discovery suite, reviewed safety procedure, and reconciled operational records are synchronized on main without private vehicle or network identifiers."
+    "summary": "The fail-closed vehicle result and its privacy-safe limitations are reconciled in the operational records for synchronization on main; no private vehicle or network identifiers or raw exchanges are included."
   },
   "handoff": {
-    "summary": "The DME advertised all four first-batch common PIDs. A single reviewed suite now combines conditional standard PID inventory, four one-shot values, selective emissions-DTC reads, and privacy-redacted Mode 09 availability with a 20-request ceiling. It is offline-verified and approved but has not run on the vehicle. Repeated monitoring and recording remain gated on the suite result."
+    "summary": "The first suite run produced useful one-shot Mode 01 evidence and then stopped safely. All four common values returned exact accepted shapes and passed stationary bounds, but their exact measurements were not retained. DTC handling needs evidence-based offline analysis; Mode 09, recording, and repeated monitoring remain unverified. No further vehicle traffic is authorized from this result."
   }
 }
 ---

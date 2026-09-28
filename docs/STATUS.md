@@ -63,8 +63,8 @@
     "summary": "Independent medium re-review found and drove repair of catch-up bursts and rolling-rate jitter, then approved the final skipped-slot scheduler, strict five-starts-per-second limiter, tests, UI wording, and no-authorization safety boundary."
   },
   "integration": {
-    "status": "local_changes",
-    "summary": "The completed live result and independently reviewed faster offline candidate are recorded in local uncommitted changes pending final commit and push."
+    "status": "synchronized",
+    "summary": "The completed live result, independently reviewed faster offline candidate, tests, and operational records are synchronized to origin/main in commit 73ce854."
   },
   "handoff": {
     "summary": "The original live rehearsal is complete and must not be repeated. The faster candidate remains finite at 300 seconds and at most 1,500 sensor attempts, but is offline-only until verification and review finish. No vehicle command is currently authorized; simulated mode remains the presentation fallback."

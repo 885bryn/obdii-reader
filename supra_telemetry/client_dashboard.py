@@ -3,6 +3,7 @@ import math
 import socket
 import threading
 import time
+from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 
@@ -16,8 +17,12 @@ from .hsfz import HsfzClient
 from .models import Sample, SignalDefinition, utc_now
 from .temperature_values import parse_temperature_response
 
-TICK_SECONDS = 1.0
-SCHEDULE = (0x0C, 0x0D, 0x0C, 0x0F, 0x0C, 0x11, 0x0C, 0x05, 0x0C, 0x5C)
+TICK_SECONDS = 0.1
+# Two-second, 20-slot cycle split into identical one-second occupancy windows:
+# five requests per second, with RPM every 0.5s, throttle every 1s, and each
+# remaining signal every 2s. Empty slots keep requests serialized.
+SCHEDULE = (0x0C, None, 0x11, 0x0D, None, 0x0C, None, 0x0F, None, None,
+            0x0C, None, 0x11, 0x05, None, 0x0C, None, 0x5C, None, None)
 SIGNALS = (
     SignalDefinition("engine_rpm", "Engine RPM", "rpm", provenance="SAE Mode 01 PID 0C", confidence="one-shot-verified", verification="one-shot-verified", enabled=True),
     SignalDefinition("vehicle_speed", "Vehicle speed", "km/h", provenance="SAE Mode 01 PID 0D", confidence="one-shot-verified", verification="one-shot-verified", enabled=True),
@@ -32,7 +37,7 @@ LIVE_FAILURES = frozenset({"timeout", "stationary-gate", "uds-rejected", "respon
 
 
 class DashboardLiveSource:
-    """Single-request cadence, source-bound route, finite budget, halt on error."""
+    """Paced request cadence, source-bound route, finite budget, halt on error."""
     def __init__(self, capture, *, timeout=2.0, duration=300, client_factory=HsfzClient,
                  connector_factory=socket.create_connection, monotonic=time.monotonic, wait=None):
         if not 0.1 <= float(timeout) <= 5.0:
@@ -47,12 +52,16 @@ class DashboardLiveSource:
                                      sock_factory=bound_connector)
         self.signals = list(SIGNALS)
         self.timeout, self.duration = float(timeout), duration
+        self._max_attempts = 5 * duration
         self._monotonic, self._wait = monotonic, wait or time.sleep
+        self._custom_wait = wait is not None
         self._stop = threading.Event()
         self._deadline = monotonic() + duration
         self._started = 0
         self._tick = 0
+        self._next_slot_at = self._deadline - duration
         self._last_started = None
+        self._request_starts = deque()
         self._gate = threading.Lock()
         self._closed = False
         self.halted = False
@@ -73,22 +82,56 @@ class DashboardLiveSource:
     def read(self):
         if self.halted:
             return []
-        if self._started >= self.duration or self._monotonic() >= self._deadline:
+        if self._started >= self._max_attempts or self._monotonic() >= self._deadline:
             return []
-        if self._last_started is not None:
-            delay = TICK_SECONDS - (self._monotonic() - self._last_started)
+        while True:
+            now = self._monotonic()
+            if now >= self._deadline or self._stop.is_set():
+                return []
+            # Drop scheduler slots missed while the prior ECU request was in
+            # flight; never replay overdue requests in a catch-up burst.
+            while self._next_slot_at < now - 1e-9:
+                self._tick += 1
+                self._next_slot_at += TICK_SECONDS
+            slot_at = max(self._next_slot_at,
+                          self._last_started + TICK_SECONDS if self._last_started is not None
+                          else self._next_slot_at)
+            delay = slot_at - now
             if delay > 0:
                 self._wait(delay)
                 if self._stop.is_set():
                     return []
-        pid = SCHEDULE[self._tick % len(SCHEDULE)]
+            pid = SCHEDULE[self._tick % len(SCHEDULE)]
+            self._tick += 1
+            self._next_slot_at += TICK_SECONDS
+            if pid is not None:
+                break
         try:
             with self._gate:
-                if self._stop.is_set():
-                    return []
-                if self._started >= self.duration or self._monotonic() >= self._deadline:
+                while True:
+                    if self._stop.is_set() or self._started >= self._max_attempts:
+                        return []
+                    now = self._monotonic()
+                    if now >= self._deadline:
+                        return []
+                    while self._request_starts and now - self._request_starts[0] >= 1.0:
+                        self._request_starts.popleft()
+                    if len(self._request_starts) < 5:
+                        break
+                    wait_for = min(self._request_starts[0] + 1.0 - now,
+                                   self._deadline - now)
+                    if wait_for <= 0:
+                        return []
+                    if self._custom_wait:
+                        self._wait(wait_for)
+                    elif self._stop.wait(wait_for):
+                        return []
+                if self._stop.is_set() or self._started >= self._max_attempts:
                     return []
                 self._last_started = self._monotonic()
+                if self._last_started >= self._deadline:
+                    return []
+                self._request_starts.append(self._last_started)
                 self._started += 1
                 response = self.client.request(bytes((0x01, pid)))
             if isinstance(response, bytes) and response[:1] == b"\x7f":
@@ -99,7 +142,6 @@ class DashboardLiveSource:
             if not low <= value <= high:
                 raise ValueError("stationary-gate")
             self.connected = bool(getattr(self.client, "connected", False))
-            self._tick += 1
             signal = BY_PID[pid]
             return [Sample(signal.id, value, signal.unit, "hsfz", "measured", "good",
                            utc_now(), time.monotonic_ns())]
@@ -171,7 +213,7 @@ def safe_dtc_snapshot(result=None, error=None):
 HTML = r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GR Supra | Telemetry</title><style>
 :root{color-scheme:dark;--bg:#08111c;--panel:#111e2b;--line:#26384a;--muted:#91a5b8;--cyan:#52d6e8;--amber:#ffc36a;--red:#ff7d7d}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -20%,#1b3850,var(--bg) 55%);color:#f1f6fa;font:16px Inter,system-ui,Segoe UI,sans-serif}header{display:flex;justify-content:space-between;align-items:center;padding:22px clamp(18px,5vw,70px);border-bottom:1px solid #ffffff12}.brand{font-size:18px;font-weight:750;letter-spacing:.04em}.sub{color:var(--muted);font-size:12px;margin-top:4px}.badges{display:flex;gap:10px;align-items:center}.badge{border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:11px;font-weight:800;letter-spacing:.1em}.live{color:var(--cyan);border-color:#286778}.sim{color:var(--amber);border-color:#72582f}.wrap{max-width:1240px;margin:30px auto;padding:0 20px}.top{display:grid;grid-template-columns:minmax(280px,.95fr) 1.4fr;gap:18px}.panel,.metric{background:linear-gradient(145deg,#142434,#0f1b27);border:1px solid var(--line);border-radius:18px}.hero{padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px}.eyebrow{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.gauge{width:min(300px,90%);aspect-ratio:1.8;overflow:hidden;position:relative;margin:12px 0}.arc{position:absolute;width:100%;height:200%;border:16px solid #24394b;border-bottom-color:transparent;border-radius:50%;top:0}.arc:after{content:"";position:absolute;inset:-16px;border:16px solid transparent;border-top-color:var(--cyan);border-radius:50%;transform:rotate(var(--angle,-135deg));transition:transform .5s}.rpm{font-size:clamp(48px,7vw,78px);font-weight:800;letter-spacing:-.06em;line-height:1}.unit{font-size:12px;color:var(--muted);letter-spacing:.12em}.herofoot{display:flex;justify-content:space-between;width:90%;margin-top:20px;color:var(--muted);font-size:12px}.metrics{display:grid;grid-template-columns:repeat(2,minmax(145px,1fr));gap:14px}.metric{padding:19px;min-height:130px}.metric .value{font-size:32px;font-weight:750;margin:17px 0 5px;letter-spacing:-.04em}.metric .unit{letter-spacing:0}.fresh{color:var(--muted);font-size:11px}.section{margin-top:20px;padding:21px}.sectionhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.section h2{font-size:14px;letter-spacing:.1em;text-transform:uppercase;margin:0}.codes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.codebox{padding:15px;background:#0b1621;border:1px solid var(--line);border-radius:12px}.codebox h3{font-size:12px;color:var(--muted);margin:0 0 12px;text-transform:uppercase;letter-spacing:.1em}.code{font:700 17px ui-monospace,monospace;margin:5px 4px 0 0;display:inline-block}.empty{color:#72869a;font-size:13px}.foot{color:#71859a;text-align:center;font-size:11px;margin:24px}.error{color:var(--red)}@media(max-width:760px){.top{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.codes{grid-template-columns:1fr}.hero{min-height:260px}header{align-items:flex-start;gap:12px;flex-direction:column}}
 </style></head><body><header><div><div class="brand">GR SUPRA <span style="color:#607d94">/</span> TELEMETRY</div><div class="sub">Read only vehicle overview</div></div><div class="badges"><span class="badge" id="mode">CONNECTING</span><span class="badge" id="status">STARTING</span></div></header><main class="wrap"><div class="top"><section class="panel hero"><div class="eyebrow">Engine speed</div><div class="gauge"><div class="arc" id="arc"></div></div><div class="rpm" id="rpm">—</div><div class="unit">REVOLUTIONS PER MINUTE</div><div class="herofoot"><span id="rpmfresh">Waiting for RPM</span><span>0—7,000 RPM</span></div></section><section class="metrics" id="metrics"></section></div><section class="panel section"><div class="sectionhead"><h2>Emissions fault snapshot</h2><span class="sub" id="dtcstatus"></span></div><div class="codes" id="codes"></div></section><div class="foot" id="notice">Only verified Mode 01 values. No fault clearing or vehicle controls.</div></main><script>
-const labels={vehicle_speed:['Vehicle speed','km/h'],coolant_temp:['Coolant temperature','°C'],engine_oil_temp:['Engine oil temperature','°C'],intake_air_temperature:['Intake air temperature','°C'],throttle_position:['Throttle position','%']};function age(s){return s?`${s.age_ms} ms old${s.observed_hz?` · ${s.observed_hz.toFixed(2)} Hz`:''}`:'Waiting for sample'}async function update(){try{const d=await(await fetch('/api/state')).json();const mode=document.querySelector('#mode');mode.textContent=d.mode==='simulated'?'SIMULATED':'LIVE';mode.className='badge '+(d.mode==='simulated'?'sim':'live');document.querySelector('#status').textContent=d.halted?'HALTED':d.connection.toUpperCase();document.querySelector('#status').className='badge '+(d.halted?'error':'');const by=Object.fromEntries(d.samples.map(s=>[s.signal_id,s]));const rpm=by.engine_rpm;document.querySelector('#rpm').textContent=rpm?.value??'—';document.querySelector('#arc').style.setProperty('--angle',`${-135+Math.max(0,Math.min(1,(rpm?.value||0)/7000))*270}deg`);document.querySelector('#rpmfresh').textContent=age(rpm);const root=document.querySelector('#metrics');root.replaceChildren();for(const [id,[name,unit]] of Object.entries(labels)){const s=by[id],card=document.createElement('article');card.className='metric';const eyebrow=document.createElement('div');eyebrow.className='eyebrow';eyebrow.textContent=name;const value=document.createElement('div');value.className='value';value.textContent=s?.value??'—';const units=document.createElement('div');units.className='unit';units.textContent=unit;const fresh=document.createElement('div');fresh.className='fresh';fresh.textContent=age(s);card.append(eyebrow,value,units,fresh);root.append(card)}const groups=document.querySelector('#codes');groups.replaceChildren();for(const [key,title] of [['stored','Stored'],['pending','Pending'],['permanent','Permanent']]){const box=document.createElement('div');box.className='codebox';const h=document.createElement('h3');h.textContent=title;box.append(h);const codes=d.dtcs[key];if(codes===null){const n=document.createElement('span');n.className='empty';n.textContent=key==='permanent'&&d.dtcs.permanent_reason?`Unavailable · ${d.dtcs.permanent_reason}`:'Unavailable';box.append(n)}else if(!codes.length){const n=document.createElement('span');n.className='empty';n.textContent='No codes reported';box.append(n)}else for(const c of codes){const n=document.createElement('span');n.className='code';n.textContent=c;box.append(n)}groups.append(box)}document.querySelector('#dtcstatus').textContent=d.dtcs.status.toUpperCase();document.querySelector('#notice').textContent=d.mode==='simulated'?'SIMULATED DATA · Values and sample fault codes are illustrative. No vehicle connection is opened.':'LIVE DATA · ECU requests paced to at least one second apart; RPM about every 2 seconds, other sensors about every 10 seconds.';if(d.halted)document.querySelector('#notice').textContent+=` Acquisition stopped: ${d.acquisition_error||'unknown error'}`}catch(e){document.querySelector('#status').textContent='API UNAVAILABLE'}}update();setInterval(update,500)
+const labels={vehicle_speed:['Vehicle speed','km/h'],coolant_temp:['Coolant temperature','°C'],engine_oil_temp:['Engine oil temperature','°C'],intake_air_temperature:['Intake air temperature','°C'],throttle_position:['Throttle position','%']};function age(s){return s?`${s.age_ms} ms old${s.observed_hz?` · ${s.observed_hz.toFixed(2)} Hz`:''}`:'Waiting for sample'}async function update(){try{const d=await(await fetch('/api/state')).json();const mode=document.querySelector('#mode');mode.textContent=d.mode==='simulated'?'SIMULATED':'LIVE';mode.className='badge '+(d.mode==='simulated'?'sim':'live');document.querySelector('#status').textContent=d.halted?'HALTED':d.connection.toUpperCase();document.querySelector('#status').className='badge '+(d.halted?'error':'');const by=Object.fromEntries(d.samples.map(s=>[s.signal_id,s]));const rpm=by.engine_rpm;document.querySelector('#rpm').textContent=rpm?.value??'—';document.querySelector('#arc').style.setProperty('--angle',`${-135+Math.max(0,Math.min(1,(rpm?.value||0)/7000))*270}deg`);document.querySelector('#rpmfresh').textContent=age(rpm);const root=document.querySelector('#metrics');root.replaceChildren();for(const [id,[name,unit]] of Object.entries(labels)){const s=by[id],card=document.createElement('article');card.className='metric';const eyebrow=document.createElement('div');eyebrow.className='eyebrow';eyebrow.textContent=name;const value=document.createElement('div');value.className='value';value.textContent=s?.value??'—';const units=document.createElement('div');units.className='unit';units.textContent=unit;const fresh=document.createElement('div');fresh.className='fresh';fresh.textContent=age(s);card.append(eyebrow,value,units,fresh);root.append(card)}const groups=document.querySelector('#codes');groups.replaceChildren();for(const [key,title] of [['stored','Stored'],['pending','Pending'],['permanent','Permanent']]){const box=document.createElement('div');box.className='codebox';const h=document.createElement('h3');h.textContent=title;box.append(h);const codes=d.dtcs[key];if(codes===null){const n=document.createElement('span');n.className='empty';n.textContent=key==='permanent'&&d.dtcs.permanent_reason?`Unavailable · ${d.dtcs.permanent_reason}`:'Unavailable';box.append(n)}else if(!codes.length){const n=document.createElement('span');n.className='empty';n.textContent='No codes reported';box.append(n)}else for(const c of codes){const n=document.createElement('span');n.className='code';n.textContent=c;box.append(n)}groups.append(box)}document.querySelector('#dtcstatus').textContent=d.dtcs.status.toUpperCase();document.querySelector('#notice').textContent=d.mode==='simulated'?'SIMULATED DATA · Values and sample fault codes are illustrative. No vehicle connection is opened.':'LIVE DATA · Target intervals: RPM 0.5s, throttle 1s, other sensors 2s. Slow ECU responses may reduce the actual update rate.';if(d.halted)document.querySelector('#notice').textContent+=` Acquisition stopped: ${d.acquisition_error||'unknown error'}`}catch(e){document.querySelector('#status').textContent='API UNAVAILABLE'}}update();setInterval(update,500)
 </script></body></html>'''
 
 

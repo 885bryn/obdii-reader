@@ -14,11 +14,17 @@ between request starts. It waits another full second before constructing
 the sensor source only after either a complete snapshot or the exact previously
 observed partial case in which stored and pending results are safe and permanent
 Mode 0A is `service-not-supported`. Any other DTC failure prevents monitoring.
-The live source serializes a fixed ten-request schedule: RPM, speed, RPM, intake
-temperature, RPM, throttle, RPM, coolant temperature, RPM, and oil temperature.
-Every request start is at least one second after the prior start, the source is
-limited to 300 attempts and 300 seconds, stationary gates apply to every value,
-and the first error closes the source without retry. The combined schedule is
-offline-tested but not vehicle-verified.
+The live source uses a fixed 20-slot, two-second scheduler. Ten slots serialize
+RPM four times, throttle twice, and speed, intake temperature, coolant
+temperature, and oil temperature once each; the other slots are idle. The 100 ms
+slot clock targets RPM every 0.5 seconds, throttle every second, and the other
+four values every two seconds without concurrent requests. The source remains
+limited by the selected 1–300 second wall duration, a rolling maximum of five
+request starts in any one-second window, and at most 1,500 attempts for 300
+seconds. Stationary gates apply to every value, and the first error closes the
+source without retry. Slow responses may reduce the achieved cadence; overdue
+scheduler slots are skipped rather than replayed. The preceding one-request-per-second schedule completed
+one bounded vehicle run; this faster schedule is offline-tested only and is not
+currently authorized for vehicle use.
 
 All core dependencies come from Python's standard library. Each vehicle request must be serialized. Use monotonic time for scheduling/freshness and UTC wall time for durable event records. Sample and cycle rates are measured from monotonic timestamps; the first observation has no rate. The dedicated common-DME monitor spaces every request start by at least one second, enforces a duration-derived ceiling of no more than 300 attempts, and stops on a stationary-gate or acquisition failure. SQLite signal definitions are scoped to sessions and retain the service/request, target address, decoder offset/width/byte order/signedness, scale, offset, provenance, and verification metadata. The dedicated monitors store decoded samples and non-identifying definitions without raw exchanges; CSV retains the session id and observed sample rate. Configuration is declarative JSON, fully checked before any socket client is constructed, and contains no executable expressions.

@@ -54,24 +54,117 @@ class ClientDashboardTests(unittest.TestCase):
                                    wait=wait or (lambda delay: clock.__setitem__(0, clock[0]+delay)),
                                    client_factory=factory, connector_factory=connector)
 
-    def test_schedule_paces_every_start_and_reads_rpm_twice_as_often(self):
+    def test_schedule_uses_idle_slots_and_meets_each_signal_cadence(self):
         with tempfile.TemporaryDirectory() as td:
             clock, calls = [0.0], []
-            source = self.make_source(capture(td), clock, calls)
-            for _ in range(10): source.read()
+            source = self.make_source(capture(td), clock, calls, duration=4)
+            for _ in range(20): source.read()
             pids = [payload[1] for _, payload in calls]
-            self.assertEqual(pids, list(SCHEDULE))
-            self.assertTrue(all(b[0]-a[0] >= 1 for a, b in zip(calls, calls[1:])))
-            self.assertEqual(pids.count(0x0C), 5)
+            self.assertEqual(pids, [pid for pid in SCHEDULE if pid is not None] * 2)
+            self.assertEqual(sum(pid is not None for pid in SCHEDULE[:10]), 5)
+            self.assertEqual(sum(pid is not None for pid in SCHEDULE[10:]), 5)
+            self.assertTrue(all(b[0]-a[0] >= 0.1 - 1e-9 for a, b in zip(calls, calls[1:])))
+            for pid, expected_count, max_gap in ((0x0C, 8, 0.5), (0x11, 4, 1.0),
+                                                 (0x0D, 2, 2.0), (0x0F, 2, 2.0),
+                                                 (0x05, 2, 2.0), (0x5C, 2, 2.0)):
+                starts = [at for at, payload in calls if payload[1] == pid]
+                self.assertEqual(len(starts), expected_count)
+                self.assertLessEqual(max(b-a for a, b in zip(starts, starts[1:])), max_gap + 1e-9)
+            starts = [at for at, _ in calls]
+            self.assertTrue(all(sum(0 <= later-at < 1.0 - 1e-9 for later in starts) <= 5
+                                for at in starts))
             self.assertEqual([s.id for s in SIGNALS], ["engine_rpm", "vehicle_speed", "intake_air_temperature", "throttle_position", "coolant_temp", "engine_oil_temp"])
 
     def test_duration_caps_attempts_and_pacing_wait_can_be_stopped(self):
         with tempfile.TemporaryDirectory() as td:
             clock, calls = [0.0], []
             source = self.make_source(capture(td), clock, calls, duration=2)
-            source.read(); source.read(); source.read()
-            self.assertEqual(len(calls), 2)
-            self.assertLessEqual(len(calls), 2)
+            for _ in range(11): source.read()
+            self.assertEqual(len(calls), 10)
+            self.assertAlmostEqual(clock[0], 1.7)
+            self.assertTrue(all(at < 2 for at, _ in calls))
+
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            source = self.make_source(capture(td), clock, calls, duration=300)
+            for _ in range(1501): source.read()
+            self.assertLessEqual(len(calls), 1500)
+            self.assertGreater(len(calls), 0)
+            self.assertLess(clock[0], 300)
+
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            source = self.make_source(capture(td), clock, calls, duration=1)
+            for _ in range(6): source.read()
+            self.assertEqual(len(calls), 5)
+            self.assertTrue(all(at < 1 for at, _ in calls))
+
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            def slow_response(payload):
+                clock[0] += 0.65
+                pid = payload[1]
+                if pid in (0x05, 0x5C):
+                    return bytes((0x41, pid, 130))
+                data = {0x0C: b"\x0d\x48", 0x0D: b"\x00", 0x0F: b"\x46", 0x11: b"\x20"}[pid]
+                return b"\x41" + bytes((pid,)) + data
+            source = self.make_source(capture(td), clock, calls, duration=4,
+                                      response=slow_response)
+            for _ in range(3): source.read()
+            starts = [at for at, _ in calls]
+            pids = [payload[1] for _, payload in calls]
+            self.assertEqual(pids, [0x0C, 0x0F, 0x0C])
+            self.assertGreater(starts[1] - starts[0], 0.5)
+            self.assertTrue(all(b-a >= 0.1 for a, b in zip(starts, starts[1:])))
+            self.assertEqual(len(calls), 3)
+
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [1.05], []
+            source = self.make_source(capture(td), clock, calls, duration=4,
+                                      wait=lambda delay: clock.__setitem__(0, clock[0]+delay))
+            source._request_starts.extend((0.11, 0.21, 0.31, 0.41, 0.51))
+            source._started = 5
+            source._next_slot_at = 1.05  # jitter put this scheduled slot late
+            source._tick = 10
+            source.read()
+            starts = [0.11, 0.21, 0.31, 0.41, 0.51, calls[0][0]]
+            self.assertAlmostEqual(calls[0][0], 1.11)
+            self.assertTrue(all(sum(0 <= later-at < 1.0 - 1e-9 for later in starts) <= 5
+                                for at in starts))
+
+    def test_rolling_rate_wait_obeys_stop_and_deadline(self):
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            waiting, release = threading.Event(), threading.Event()
+            def wait(_):
+                waiting.set(); release.wait(1)
+            source = self.make_source(capture(td), clock, calls, duration=3, wait=wait)
+            clock[0] = 0.5
+            source._request_starts.extend((0.0, 0.1, 0.2, 0.3, 0.4))
+            source._started = 5
+            source._next_slot_at = 0.5
+            source._tick = 5
+            reader = threading.Thread(target=source.read)
+            reader.start(); self.assertTrue(waiting.wait(1))
+            closer = threading.Thread(target=source.close)
+            closer.start(); release.set()
+            reader.join(1); closer.join(1)
+            self.assertFalse(reader.is_alive())
+            self.assertFalse(closer.is_alive())
+            self.assertEqual(calls, [])
+
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            source = self.make_source(capture(td), clock, calls, duration=2,
+                                      wait=lambda delay: clock.__setitem__(0, clock[0]+delay))
+            clock[0] = 1.5
+            source._request_starts.extend((1.2, 1.3, 1.4, 1.45, 1.49))
+            source._started = 5
+            source._next_slot_at = 1.5
+            source._tick = 15
+            source.read()
+            self.assertEqual(clock[0], 2.0)
+            self.assertEqual(calls, [])
 
         with tempfile.TemporaryDirectory() as td:
             clock, calls = [0.0], []

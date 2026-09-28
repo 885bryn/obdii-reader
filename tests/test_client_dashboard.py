@@ -1,0 +1,311 @@
+import contextlib
+import io
+import json
+import tempfile
+import threading
+import unittest
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+from urllib.request import urlopen
+from unittest.mock import patch
+
+from supra_telemetry.client_dashboard import (
+    BOUNDS, HTML, SCHEDULE, SIGNALS, DashboardLiveSource, DashboardSimSource,
+    dashboard_state, make_dashboard_handler, run_live_dtc_snapshot, safe_dtc_snapshot,
+    reserve_dashboard_server, serve_client_dashboard, wait_after_dtc_snapshot,
+)
+from supra_telemetry.engine import AcquisitionEngine
+from supra_telemetry.models import Sample
+
+
+def capture(directory):
+    vin, mac = "TESTVIN0000000001", "001122334455"
+    body = b"DIAGADR10BMWMAC" + mac.encode() + b"BMWVIN" + vin.encode()
+    packet = len(body).to_bytes(4, "big") + b"\x00\x11" + body
+    path = Path(directory) / "capture.json"
+    path.write_text(json.dumps({"interface": "169.254.10.30", "hsfz": [{
+        "peer": "169.254.10.20", "port": 6811,
+        "identification": {"vin": vin, "mac": mac, "diagnostic_address": 16},
+        "raw_hex": packet.hex()}]}), encoding="utf-8")
+    return path
+
+
+class ClientDashboardTests(unittest.TestCase):
+    def make_source(self, path, clock, calls, *, duration=300, wait=None, response=None):
+        class Client:
+            connected = True
+            def request(self, payload):
+                calls.append((clock[0], payload))
+                if response:
+                    return response(payload)
+                pid = payload[1]
+                if pid in (0x05, 0x5C):
+                    return bytes((0x41, pid, 130))
+                data = {0x0C: b"\x0d\x48", 0x0D: b"\x00", 0x0F: b"\x46", 0x11: b"\x20"}[pid]
+                return b"\x41" + bytes((pid,)) + data
+            def close(self): pass
+        def factory(*_args, **kwargs):
+            kwargs["sock_factory"](("ignored", 6801), kwargs["timeout"])
+            return Client()
+        def connector(addr, timeout, *, source_address):
+            self.assertEqual(source_address, ("169.254.10.30", 0))
+            return object()
+        return DashboardLiveSource(path, duration=duration, monotonic=lambda: clock[0],
+                                   wait=wait or (lambda delay: clock.__setitem__(0, clock[0]+delay)),
+                                   client_factory=factory, connector_factory=connector)
+
+    def test_schedule_paces_every_start_and_reads_rpm_twice_as_often(self):
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            source = self.make_source(capture(td), clock, calls)
+            for _ in range(10): source.read()
+            pids = [payload[1] for _, payload in calls]
+            self.assertEqual(pids, list(SCHEDULE))
+            self.assertTrue(all(b[0]-a[0] >= 1 for a, b in zip(calls, calls[1:])))
+            self.assertEqual(pids.count(0x0C), 5)
+            self.assertEqual([s.id for s in SIGNALS], ["engine_rpm", "vehicle_speed", "intake_air_temperature", "throttle_position", "coolant_temp", "engine_oil_temp"])
+
+    def test_duration_caps_attempts_and_pacing_wait_can_be_stopped(self):
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            source = self.make_source(capture(td), clock, calls, duration=2)
+            source.read(); source.read(); source.read()
+            self.assertEqual(len(calls), 2)
+            self.assertLessEqual(len(calls), 2)
+
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            waiting, release = threading.Event(), threading.Event()
+            def wait(_):
+                waiting.set(); release.wait(1)
+            source = self.make_source(capture(td), clock, calls, wait=wait)
+            source.read()
+            reader = threading.Thread(target=source.read)
+            reader.start(); self.assertTrue(waiting.wait(1))
+            source.close(); release.set(); reader.join(1)
+            self.assertFalse(reader.is_alive())
+            self.assertEqual(len(calls), 1)
+
+    def test_first_failure_halts_without_retry_and_stationary_bound(self):
+        with tempfile.TemporaryDirectory() as td:
+            clock, calls = [0.0], []
+            source = self.make_source(capture(td), clock, calls,
+                                      response=lambda _: b"\x7f\x01\x31")
+            sample = source.read()[0]
+            self.assertEqual(sample.error, "uds-rejected")
+            self.assertEqual(source.read(), [])
+            self.assertEqual(len(calls), 1)
+
+        self.assertEqual(BOUNDS[0x0D], (0, 0))
+        self.assertEqual(BOUNDS[0x0C], (300, 2500))
+
+    def test_dtc_partial_result_keeps_safe_codes_and_fixed_reason(self):
+        class Error(Exception):
+            completed_reads = {"stored": ["P0420"], "pending": ["U0123"]}
+            failed_read = "permanent"
+            reason = "uds-rejected"
+            rejection_subtype = "service-not-supported"
+        got = safe_dtc_snapshot(error=Error())
+        self.assertEqual(got, {"stored": ["P0420"], "pending": ["U0123"],
+                               "permanent": None, "permanent_reason": "service-not-supported",
+                               "status": "partial"})
+        self.assertIn("SIMULATED", HTML)
+        self.assertIn("No fault clearing", HTML)
+        self.assertIn("permanent_reason", HTML)
+
+        with patch("supra_telemetry.client_dashboard.read_emissions_dtcs",
+                   side_effect=RuntimeError("private socket details")):
+            unavailable = run_live_dtc_snapshot("capture")
+        self.assertEqual(unavailable["permanent_reason"], "unexpected-error")
+        self.assertNotIn("private", repr(unavailable))
+
+    def test_http_api_state_contains_only_safe_samples_and_allowlisted_error(self):
+        class Source:
+            halted = True
+            connected = False
+            halt_reason = "secret ip 10.0.0.1"
+            def read(self): return []
+        engine = AcquisitionEngine(source=Source())
+        engine.latest = {"engine_rpm": Sample("engine_rpm", 850, "rpm", "hsfz",
+            "measured", "good", "now", 1)}
+        state = dashboard_state(engine, engine.source, "live", {
+            "stored": [], "pending": [], "permanent": None,
+            "permanent_reason": "service-not-supported", "status": "partial"})
+        encoded = json.dumps(state)
+        self.assertEqual(state["acquisition_error"], "unexpected-error")
+        self.assertIn('"engine_rpm"', encoded)
+        self.assertNotIn("secret ip", encoded)
+        self.assertNotIn("raw_hex", encoded)
+
+        simulated = DashboardSimSource(monotonic=lambda: 1.0)
+        simulated_engine = AcquisitionEngine(source=simulated)
+        simulated_engine.step()
+        handler = make_dashboard_handler(simulated_engine, simulated, "simulated", {
+            "stored": ["P0420"], "pending": [], "permanent": [],
+            "permanent_reason": None, "status": "simulated"})
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with urlopen(f"http://127.0.0.1:{server.server_port}/api/state", timeout=2) as response:
+                payload = json.loads(response.read())
+            self.assertEqual(payload["mode"], "simulated")
+            self.assertEqual({s["signal_id"] for s in payload["samples"]}, {s.id for s in SIGNALS})
+            self.assertEqual(payload["dtcs"]["stored"], ["P0420"])
+        finally:
+            server.shutdown(); thread.join(2); server.server_close()
+
+    def test_simulated_source_has_exact_six_ids_and_no_network_surface(self):
+        source = DashboardSimSource(monotonic=lambda: 2.0)
+        samples = source.read()
+        self.assertEqual({s.signal_id for s in samples}, {s.id for s in SIGNALS})
+        self.assertTrue(all(s.quality == "simulated" for s in samples))
+        self.assertFalse(hasattr(source, "client"))
+        self.assertFalse(hasattr(source, "connector"))
+        self.assertEqual([s.signal_id for s in source.read()], ["engine_rpm"])
+
+    def test_cli_validation_and_mode_wiring(self):
+        from supra_telemetry import __main__ as cli
+        with patch.object(cli, "serve_client_dashboard", return_value=0) as serve:
+            self.assertEqual(cli.main(["client-dashboard", "--mode", "simulated"]), 0)
+            self.assertEqual(serve.call_args.kwargs["mode"], "simulated")
+        with self.assertRaises(SystemExit):
+            cli.main(["client-dashboard", "--mode", "live"])
+        with self.assertRaises(SystemExit):
+            cli.main(["client-dashboard", "--mode", "simulated", "--capture", "private"])
+        with patch.object(cli, "run_live_dtc_snapshot", return_value={
+                "stored": [], "pending": [], "permanent": None,
+                "permanent_reason": "uds-rejected", "status": "partial"}), \
+             patch.object(cli, "DashboardLiveSource") as make_source, \
+             contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(cli.main(["client-dashboard", "--mode", "live", "--capture", "private"]), 1)
+            make_source.assert_not_called()
+
+    def test_live_cli_binds_before_vehicle_reads_and_waits_before_monitor(self):
+        from supra_telemetry import __main__ as cli
+        events = []
+        class Server:
+            server_port = 12345
+            def server_close(self): events.append("closed")
+        result = {"stored": [], "pending": [], "permanent": [],
+                  "permanent_reason": None, "status": "complete"}
+        with patch.object(cli, "reserve_dashboard_server", side_effect=lambda *_: events.append("bind") or Server()), \
+             patch.object(cli, "run_live_dtc_snapshot", side_effect=lambda *_: events.append("dtc") or result), \
+             patch.object(cli, "wait_after_dtc_snapshot", side_effect=lambda: events.append("gap")), \
+             patch.object(cli, "DashboardLiveSource", side_effect=lambda *_a, **_k: events.append("source") or object()), \
+             patch.object(cli, "serve_client_dashboard", side_effect=lambda *_a, **_k: events.append("serve") or 0):
+            self.assertEqual(cli.main(["client-dashboard", "--mode", "live", "--capture", "private"]), 0)
+        self.assertEqual(events, ["bind", "dtc", "gap", "source", "serve"])
+
+    def test_live_cli_occupied_port_prevents_vehicle_calls(self):
+        from supra_telemetry import __main__ as cli
+        server = ThreadingHTTPServer(("127.0.0.1", 0), lambda *_: None)
+        listener = threading.Thread(target=server.serve_forever, daemon=True)
+        listener.start()
+        try:
+            with patch.object(cli, "run_live_dtc_snapshot") as dtc, \
+                 patch.object(cli, "DashboardLiveSource") as source, \
+                 contextlib.redirect_stdout(io.StringIO()) as output:
+                self.assertEqual(cli.main(["client-dashboard", "--mode", "live", "--capture", "private",
+                                           "--port", str(server.server_port)]), 1)
+            dtc.assert_not_called(); source.assert_not_called()
+            self.assertEqual(json.loads(output.getvalue())["reason"], "dashboard-bind-failed")
+        finally:
+            server.shutdown(); listener.join(2); server.server_close()
+
+    def test_dtc_requests_are_spaced_with_injected_clock(self):
+        from supra_telemetry.emissions_dtcs import read_emissions_dtcs
+        with tempfile.TemporaryDirectory() as td:
+            path = capture(td); clock, starts, waits = [0.0], [], []
+            class Client:
+                def request(self, payload):
+                    starts.append(clock[0])
+                    service = payload[0]
+                    return bytes((service + 0x40, 0))
+                def close(self): pass
+            def wait(delay):
+                waits.append(delay); clock[0] += delay
+            result = read_emissions_dtcs(path, client_factory=lambda *_a, **_k: Client(),
+                                         monotonic=lambda: clock[0], wait=wait,
+                                         min_request_interval=1.0)
+            self.assertEqual(result["requests_sent"], 3)
+            self.assertTrue(all(b-a >= 1 for a, b in zip(starts, starts[1:])))
+            self.assertEqual(waits, [1.0, 1.0])
+
+    def test_prebound_server_closes_if_worker_start_fails(self):
+        class Source:
+            def close(self): self.closed = True
+        class BadWorker:
+            def __init__(self, **_): pass
+            def start(self): raise RuntimeError("private details")
+        source = Source()
+        server = reserve_dashboard_server("127.0.0.1", 0)
+        port = server.server_port
+        with self.assertRaises(RuntimeError):
+            serve_client_dashboard(source, mode="live", dtcs={}, server=server,
+                                   worker_factory=BadWorker)
+        self.assertTrue(source.closed)
+        reopened = ThreadingHTTPServer(("127.0.0.1", port), lambda *_: None)
+        reopened.server_close()
+
+    def test_source_construction_failure_is_redacted_and_closes_reserved_server(self):
+        from supra_telemetry import __main__ as cli
+        events = []
+        class Server:
+            def server_close(self): events.append("closed")
+        with patch.object(cli, "reserve_dashboard_server", return_value=Server()), \
+             patch.object(cli, "run_live_dtc_snapshot", return_value={"status": "complete"}), \
+             patch.object(cli, "wait_after_dtc_snapshot"), \
+             patch.object(cli, "DashboardLiveSource", side_effect=RuntimeError("secret path 10.2.3.4")), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(cli.main(["client-dashboard", "--mode", "live", "--capture", "private"]), 1)
+        self.assertEqual(events, ["closed"])
+        self.assertEqual(json.loads(output.getvalue())["reason"], "source-unavailable")
+        self.assertNotIn("secret", output.getvalue())
+
+    def test_post_dtc_wait_failure_is_redacted_and_closes_reserved_server(self):
+        from supra_telemetry import __main__ as cli
+        events = []
+        class Server:
+            def server_close(self): events.append("closed")
+        with patch.object(cli, "reserve_dashboard_server", return_value=Server()), \
+             patch.object(cli, "run_live_dtc_snapshot", return_value={"status": "complete"}), \
+             patch.object(cli, "wait_after_dtc_snapshot",
+                          side_effect=RuntimeError("secret timing detail")), \
+             patch.object(cli, "DashboardLiveSource") as source, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(cli.main(["client-dashboard", "--mode", "live",
+                                       "--capture", "private"]), 1)
+        source.assert_not_called()
+        self.assertEqual(events, ["closed"])
+        self.assertEqual(json.loads(output.getvalue())["reason"], "source-unavailable")
+        self.assertNotIn("secret", output.getvalue())
+
+    def test_cli_redacts_dashboard_serving_failure(self):
+        from supra_telemetry import __main__ as cli
+        result = {"stored": [], "pending": [], "permanent": [],
+                  "permanent_reason": None, "status": "complete"}
+        with patch.object(cli, "reserve_dashboard_server", return_value=object()), \
+             patch.object(cli, "run_live_dtc_snapshot", return_value=result), \
+             patch.object(cli, "wait_after_dtc_snapshot"), \
+             patch.object(cli, "DashboardLiveSource", return_value=object()), \
+             patch.object(cli, "serve_client_dashboard", side_effect=RuntimeError("private bind data")), \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(cli.main(["client-dashboard", "--mode", "live", "--capture", "private"]), 1)
+        self.assertEqual(json.loads(output.getvalue())["reason"], "dashboard-stopped")
+        self.assertNotIn("private bind", output.getvalue())
+
+    def test_concurrent_latest_updates_do_not_break_state_snapshot(self):
+        class ChangingLatest(dict):
+            def values(self):
+                raise RuntimeError("dictionary changed size during iteration")
+        class Source:
+            halted = connected = False
+        engine = AcquisitionEngine(source=Source())
+        engine.latest = ChangingLatest()
+        state = dashboard_state(engine, engine.source, "live", {})
+        self.assertEqual(state["samples"], [])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,6 +1,7 @@
 """Bounded, read-only emissions DTC retrieval over the captured DME route."""
 import re
 import socket
+import time
 
 from .dme_check import DME_TARGET_ADDRESS
 from .gateway_check import TESTER_ADDRESS, load_gateway_capture
@@ -137,7 +138,9 @@ def parse_counted_dtc_payload(payload):
 
 
 def read_emissions_dtcs(path, timeout=2.0, *, client_factory=HsfzClient,
-                        connector_factory=socket.create_connection):
+                        connector_factory=socket.create_connection,
+                        monotonic=time.monotonic, wait=time.sleep,
+                        min_request_interval=0.0):
     """Read stored, pending, and permanent emissions DTCs once each in order."""
     try:
         if not 0.1 <= float(timeout) <= 5.0:
@@ -171,8 +174,14 @@ def read_emissions_dtcs(path, timeout=2.0, *, client_factory=HsfzClient,
                                     rejection_subtype=rejection_subtype,
                                     completed_reads=prior) from None
 
+        last_started = None
         for service, positive, label in READS:
+            if last_started is not None:
+                delay = float(min_request_interval) - (monotonic() - last_started)
+                if delay > 0:
+                    wait(delay)
             requests_sent += 1  # Count before request; send may precede a transport failure.
+            last_started = monotonic()
             try:
                 response = client.request(bytes((service,)))
             except TimeoutError:

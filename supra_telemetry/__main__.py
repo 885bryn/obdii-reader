@@ -39,6 +39,10 @@ from .profiles import load_profile
 from .storage import TelemetryStore, export_csv
 from .web import serve
 from .temperature_monitor import TemperatureMonitorSource, run_monitor
+from .client_dashboard import (DashboardLiveSource, DashboardSimSource,
+                               run_live_dtc_snapshot, serve_client_dashboard,
+                               SIMULATED_DTCS, reserve_dashboard_server,
+                               wait_after_dtc_snapshot)
 
 
 def demo_signals():
@@ -121,6 +125,13 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     demo = sub.add_parser("demo", help="run simulated dashboard and optional SQLite logger")
     add_server_args(demo)
+    client_dashboard = sub.add_parser("client-dashboard", help="run a bounded simulated or live client dashboard")
+    client_dashboard.add_argument("--mode", choices=("simulated", "live"), default="simulated")
+    client_dashboard.add_argument("--capture", help="private discovery capture required in live mode")
+    client_dashboard.add_argument("--duration", type=int, default=300, help="automatic stop in seconds (1 to 300)")
+    client_dashboard.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    client_dashboard.add_argument("--ui-host", default="127.0.0.1")
+    client_dashboard.add_argument("--port", type=int, default=8765)
     disc = sub.add_parser("discover", help="bounded HSFZ UDP and DoIP discovery; sends no diagnostics")
     disc.add_argument("--interface", required=True, help="local IPv4 address to bind")
     disc.add_argument("--timeout", type=float, default=.6); disc.add_argument("--broadcast", default="169.254.255.255"); disc.add_argument("--json"); disc.add_argument("--redact-console", action="store_true", help="redact vehicle and network identifiers from console JSON")
@@ -423,6 +434,57 @@ def main(argv=None):
         except Exception:
             print(json.dumps({"result": "failed", "check": "common DME monitor",
                               "reason": "monitor-stopped"}))
+            return 1
+    if args.command == "client-dashboard":
+        if not 1 <= args.duration <= 300:
+            parser.error("duration must be between 1 and 300 seconds")
+        if not 0.1 <= args.timeout <= 5.0:
+            parser.error("timeout must be between 0.1 and 5 seconds")
+        if args.ui_host not in ("127.0.0.1", "localhost", "::1"):
+            parser.error("dashboard must bind to loopback")
+        if args.mode == "live" and not args.capture:
+            parser.error("--capture is required for live mode")
+        if args.mode == "simulated" and args.capture:
+            parser.error("--capture is only accepted in live mode")
+        if args.mode == "simulated":
+            return serve_client_dashboard(DashboardSimSource(), mode="simulated",
+                                          dtcs={**SIMULATED_DTCS, "permanent_reason": None, "status": "simulated"},
+                                          host=args.ui_host, port=args.port,
+                                          duration=args.duration)
+        try:
+            server = reserve_dashboard_server(args.ui_host, args.port)
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "client dashboard",
+                              "reason": "dashboard-bind-failed"}))
+            return 1
+        dtcs = run_live_dtc_snapshot(args.capture, args.timeout)
+        partial_supported_unavailable_permanent = (
+            dtcs.get("status") == "partial"
+            and isinstance(dtcs.get("stored"), list)
+            and isinstance(dtcs.get("pending"), list)
+            and dtcs.get("permanent") is None
+            and dtcs.get("permanent_reason") == "service-not-supported")
+        if dtcs.get("status") != "complete" and not partial_supported_unavailable_permanent:
+            server.server_close()
+            print(json.dumps({"result": "failed", "check": "client dashboard",
+                              "reason": "dtc-snapshot-unavailable"}))
+            return 1
+        try:
+            wait_after_dtc_snapshot()
+            source = DashboardLiveSource(args.capture, timeout=args.timeout,
+                                         duration=args.duration)
+        except Exception:
+            server.server_close()
+            print(json.dumps({"result": "failed", "check": "client dashboard",
+                              "reason": "source-unavailable"}))
+            return 1
+        try:
+            return serve_client_dashboard(source, mode="live", dtcs=dtcs,
+                                          host=args.ui_host, port=args.port,
+                                          duration=args.duration, server=server)
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "client dashboard",
+                              "reason": "dashboard-stopped"}))
             return 1
     if not 0.1 <= args.interval <= 10:
         parser.error("interval must be between 0.1 and 10 seconds")

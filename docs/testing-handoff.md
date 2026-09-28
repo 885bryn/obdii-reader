@@ -21,19 +21,28 @@ Official Codex documentation is available at https://developers.openai.com/learn
 
 ## 2. Prove the software offline
 
-Start the simulated dashboard and recorder:
+Start the presentation-ready simulated dashboard:
+
+```powershell
+python -m supra_telemetry client-dashboard --mode simulated --duration 300
+```
+
+Open the printed loopback URL and confirm the SIMULATED and RUNNING badges, the
+large RPM gauge, the five supporting sensor cards, and the three fault-code
+groups. RPM should report approximately 5 Hz while the supporting values report
+approximately 1 Hz. The footer must state that no vehicle connection is open.
+Press `Ctrl+C` to stop.
+
+The older synthetic recorder remains available when a SQLite/CSV demonstration
+is specifically needed:
 
 ```powershell
 python -m supra_telemetry demo --db demo-session.sqlite
-```
-
-Open the printed loopback URL, confirm five cards appear, then press `Ctrl+C`. Export the recording:
-
-```powershell
 python -m supra_telemetry export demo-session.sqlite demo-session.csv
 ```
 
-The SQLite and CSV files are ignored by Git.
+The SQLite and CSV files are ignored by Git. The client dashboard itself does not
+record samples.
 
 ## 3. Prepare the stationary vehicle
 

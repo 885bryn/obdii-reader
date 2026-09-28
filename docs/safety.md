@@ -18,12 +18,61 @@ Diagnostic/PAD Mode is permitted only as a manually entered vehicle state for bo
 8. The consolidated information-gathering check is `python -m supra_telemetry collect-read-only-suite --capture captures/discovery.json`. It uses only the captured source interface, captured peer, tester F4, fixed DME target 0x12, and TCP 6801. Its four fixed phases are: (1) conditional Mode 01 support bitmaps `00` through `E0`, at most eight requests; (2) one Mode 01 value request each for PIDs `0C`, `0D`, `0F`, and `11`, at most four; (3) one emissions-DTC read each for Mode 03, 07, and 0A, at most three; and (4) Mode 09 InfoType `00` followed only by advertised InfoTypes `02`, `04`, `06`, and `0A`, at most five. The total ceiling is 20 requests. It uses fresh support and stationary plausibility gates, a fresh source-bound connection for each phase, two-second warning windows, stop-on-first-failure behavior, and no retries, scans, session changes, tester-present, clears, controls, writes, polling, or raw persistence. On 2026-09-27, its first reviewed stationary, engine-idling, PAD-off run completed inventory and common values, then stopped during DTC reading with `response-invalid` after a conservative total of 11 requests. A second run verified strict count-prefixed decoding for stored and pending DTC reads, then stopped when the permanent read returned `uds-rejected` after a conservative total of 13 requests. It reported no stored DTCs and pending `P0420`. Neither run reached Mode 09 or the monitor. Future failure output preserves only allowlisted completed summaries, decoded codes, fixed structural or rejection categories, and counts; raw replies and numeric response codes remain private. Do not rerun this suite until a new procedure is separately reviewed.
 9. The optional one-shot temperature-values check is available as `python -m supra_telemetry read-temperature-values --capture captures/discovery.json`. It uses the same exact capture interface, peer, tester F4, DME target 0x12, and TCP 6801. It attempts at most two application requests total on one connection: exactly Mode 01 PID 05 once, then PID 5C once. Any first-request failure stops the sequence. There are no support-bitmap repeats, retries, polling, scans, tester-present messages, session changes, fault clears, routines, actuator/security requests, writes, or raw persistence. A positive response must exactly match `41 05 xx` or `41 5C xx`; each reported value is the byte minus 40 °C. Output is privacy-safe and `requests_sent` conservatively counts attempts (an upper bound when transmission is uncertain). Both values and the route have been verified with one-shot reads on this vehicle in normal engine-running mode without PAD/Diagnostic Mode. Stop on unexpected response or vehicle warning.
 10. The dedicated `monitor-temperatures --capture captures/discovery.json` path is limited to the two previously one-shot-verified standard temperature reads. It allows at most 300 seconds, with at least a 2-second idle gap after each completed two-read cycle. At the duration limit it starts no new request and closes the dashboard; an in-flight request may finish or time out before cleanup. Any request/response failure closes the dashboard and stops the command without retry. One controlled 300-second vehicle run completed on 2026-09-26 in normal engine-running mode without PAD/Diagnostic Mode, with logging off, a clean exit, and no observed acquisition or recording error. Its approximate completed-pair rate was 0.49–0.50 per second. Five chronological coolant/oil checkpoint pairs were 77/78, 79/84, 82/88, 81/90, and 83/90 °C; these are checkpoint samples, not run-wide extrema. This evidence establishes only that bounded run, not longer duration or recording. Keep any further test stationary, use the same conservative limits unless a separately reviewed procedure changes them, and stop immediately if anything unexpected occurs. The optional `--db` stores decoded samples only; logging is off by default and recording has not been vehicle-tested.
-11. Do not activate generic profile-driven live `run` until routing and every request are reviewed against authoritative documentation and empirically shown to be read-only. Any transport, protocol, negative-response, or decoder error halts all later requests. Inspect the cause before starting a fresh run; in-process resume is not supported.
-12. Check that data remains plausible while stationary. For the consolidated engine-running check, vehicle speed must remain 0 km/h, RPM must be consistent with idle, intake-air temperature must be physically plausible, and throttle must remain within 0–100%; these are assessment expectations, not prior empirical verification. End the session, disconnect cleanly, and inspect results before increasing scope or rate.
+11. The client dashboard's simulated mode opens no vehicle connection. Its live mode is a new combined workflow over only the already verified DME route and six Mode 01 PIDs. It reserves its loopback listener before any vehicle request, then attempts the existing fixed Mode 03/07/0A emissions-DTC snapshot once with at least one second between request starts. Monitoring starts only after another one-second quiet interval and either a complete snapshot or the exact previously observed partial result in which stored and pending decode successfully and permanent Mode 0A is rejected as `service-not-supported`; every other DTC outcome prevents monitor construction. The fixed monitoring schedule is RPM `0C`, speed `0D`, RPM `0C`, intake temperature `0F`, RPM `0C`, throttle `11`, RPM `0C`, coolant `05`, RPM `0C`, and oil temperature `5C`. Monitoring request starts are at least one second apart, the ceiling is 300 monitoring attempts and 300 seconds, values must remain within the stationary gates, and the first monitoring error closes the connection without retry. The dashboard persists neither samples nor raw exchanges. This combined path is offline-tested but not vehicle-verified; use it only under the exact current authorization below.
+12. Do not activate generic profile-driven live `run` until routing and every request are reviewed against authoritative documentation and empirically shown to be read-only. Any transport, protocol, negative-response, or decoder error halts all later requests. Inspect the cause before starting a fresh run; in-process resume is not supported.
+13. Check that data remains plausible while stationary. For the consolidated engine-running check, vehicle speed must remain 0 km/h, RPM must be consistent with idle, intake-air temperature must be physically plausible, and throttle must remain within 0–100%; these are assessment expectations, not prior empirical verification. End the session, disconnect cleanly, and inspect results before increasing scope or rate.
 
 ## Current vehicle authorization
 
-The second consolidated normal-mode run and the single conditional PAD comparison have ended. Each failure correctly ended vehicle traffic. The monitor and Mode 09 remain unverified and unapproved. The vehicle may remain off and disconnected; no vehicle command is currently approved.
+The second consolidated normal-mode run and the single conditional PAD comparison have ended. Each failure correctly ended vehicle traffic. The combined client dashboard and Mode 09 remain vehicle-unverified. The dashboard implementation and exact procedure below passed all 116 offline tests and independent medium re-review. Exactly one candidate normal-mode client-dashboard rehearsal is now approved under that procedure. No other vehicle command, retry, or second dashboard run is approved.
+
+## Authorized normal-mode client-dashboard rehearsal
+
+This procedure is the current authorization for one candidate run only. The
+implementation and this exact procedure passed independent review, the complete
+116-test offline suite passed, and `docs/STATUS.md` records the approval. A
+successful run will verify only this bounded stationary session; it will not
+authorize an additional client demonstration or a higher rate.
+
+Before the candidate run:
+
+1. Use the stationary setup in step 1 above: outdoors, parking brake set,
+   transmission in Park, wheels chocked, engine idling normally with PAD/Diagnostic
+   Mode off, and a second person available. Do not test while driving.
+2. Close ISTA, BimmerLink, coding tools, and every other application that could use
+   the diagnostic connection. Use only the existing private discovery capture and
+   its already verified source-bound route; do not rediscover, scan, substitute an
+   address, or run another vehicle command in this session.
+3. Confirm the synchronized candidate build's complete offline test suite passes
+   and its independent review approves this exact command and procedure. If the
+   adapter, link, capture, vehicle state, or battery condition is uncertain, do not
+   begin.
+
+Run exactly once:
+
+```powershell
+python -m supra_telemetry client-dashboard --mode live --capture captures/discovery.json --duration 300
+```
+
+The loopback listener is reserved before the DTC snapshot opens one source-bound
+connection and attempts at most Mode 03, 07, and 0A once each in that order, with
+at least one second between request starts. The known `service-not-supported` result for
+permanent Mode 0A is the only partial result that may proceed, and only when stored
+and pending results decoded safely. After another one-second quiet interval,
+monitoring opens one source-bound
+connection and uses only the fixed ten-request schedule above, repeating within
+the 300-attempt and 300-second ceiling. The complete command can therefore attempt
+at most 303 application requests. It performs no retry, scan, reconnect after a
+monitoring error, discovery, session change, tester-present exchange, clear,
+routine, control, write, recording, or raw persistence.
+
+Any timeout, transport error, unexpected response, rejection other than the exact
+allowed permanent-service result, implausible value, nonzero speed, vehicle
+warning, adapter problem, or browser/API error ends the run. Press `Ctrl+C` if the
+dashboard does not stop itself, then disconnect cleanly. Do not retry, switch PAD
+state, run another command, or present the live mode again in the same session.
+Share only the command's fixed status and decoded values/codes; never share the
+capture, raw responses, VIN, MAC, IP/interface information, or other identifiers.
 
 Offline preparation and independent review were completed for a minimal read-only DTC comparison in manually entered PAD/Diagnostic Mode using only the already verified route and fixed Mode 03/07/0A reads. Implementation commit `ab599d2` is synchronized, and the single authorized run occurred on 2026-09-28. It must not be repeated. Toyota's published PAD instruction applies to its specific ISTA transport-mode deletion procedure and does not by itself establish that generic DTC reading requires PAD Mode.
 

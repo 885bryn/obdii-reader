@@ -15,6 +15,30 @@ Open the printed loopback URL in a browser. Press Ctrl+C to stop. The demo value
 
 `discover --interface <local-IPv4>` sends the HSFZ vehicle-identification datagram to the ENET link-local broadcast on UDP 6811 and a DoIP vehicle-identification broadcast. It does not establish diagnostic sessions or send ECU diagnostic requests. Results are candidates, not proof that live telemetry works. The broadcast can be overridden for a known interface subnet; the program does not scan addresses. Use `--redact-console` when saving a private JSON capture so terminal output can be shared without exposing vehicle or network identifiers.
 
+## Client dashboard
+
+The client dashboard has matching simulated and live presentation modes. Simulated
+mode opens no vehicle connection and is the safe presentation fallback:
+
+```powershell
+python -m supra_telemetry client-dashboard --mode simulated --duration 300
+```
+
+It shows a large RPM gauge, vehicle speed, coolant temperature, engine-oil
+temperature, intake-air temperature, throttle position, and an explicitly
+simulated emissions-fault snapshot. RPM updates about five times per second in
+simulated mode while the supporting values update about once per second.
+
+Live mode is implemented and offline-tested, but the combined workflow is not yet
+vehicle-verified. It first takes one fixed Mode 03/07/0A fault snapshot, then uses
+only the six already verified Mode 01 PIDs on the capture-bound DME route. Request
+starts remain at least one second apart; RPM is requested about every two seconds
+and each other value about every ten seconds. The dashboard is loopback-only,
+records no raw exchanges, exposes no fault-clear or vehicle-control action, stops
+on the first monitoring error, and ends after at most 300 seconds. Do not run it
+on the vehicle except under the exact current authorization in
+[docs/safety.md](docs/safety.md).
+
 `verify-gateway --capture captures/discovery.json` validates one unambiguous HSFZ discovery response and sends exactly one UDS ReadDataByIdentifier request for VIN (22 F190) to its captured diagnostic address over TCP 6801, binding the client socket to the capture's exact local interface address. If that address is no longer assigned, connection setup fails before a diagnostic request is sent. It uses tester address F4, a community-corroborated convention that Toyota has not published for this vehicle. Output contains only pass/fail status. Success verifies gateway HSFZ identity routing only; it does not establish DME addressing or support for oil temperature, coolant temperature, or any other signal. The check does not save raw exchanges.
 
 `verify-dme --capture captures/discovery.json` performs a separate single VIN read (22 F190) to candidate DME target 0x12, using the capture's peer and exact local interface binding, with tester address F4. Both routing values are community-corroborated and are not Toyota-published proof for this vehicle. Failure output uses only fixed generic reason categories; no exchange is saved. Success verifies DME identity routing only; it does not establish support for coolant/oil temperature or any other PID.

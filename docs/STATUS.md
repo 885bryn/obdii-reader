@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "handoff",
   "health": "healthy",
-  "updated_at": "2026-09-28T11:25:57-07:00",
+  "updated_at": "2026-09-28T12:39:27-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -17,54 +17,54 @@
       "path": "docs/roadmap.md"
     },
     "milestone": {
-      "id": "M010",
-      "title": "Read-only fault diagnostics",
+      "id": "M009",
+      "title": "Common DME live sensors",
       "status": "in_progress",
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T010-5",
-      "title": "Record bounded PAD-on DTC comparison",
-      "status": "complete",
-      "path": "docs/safety.md"
+      "id": "T009-4",
+      "title": "Build client live/simulated dashboard",
+      "status": "reviewed",
+      "path": "docs/roadmap.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "One reviewed stationary PAD-on comparison attempted exactly the three approved Mode 03/07/0A reads. Stored and pending each decoded P0420; the permanent read was rejected as service-not-supported. The command stopped with no retry, other vehicle command, or raw persistence.",
-    "at": "2026-09-28T11:23:00-07:00",
+    "summary": "A client-ready loopback dashboard now has explicit simulated and live modes, six verified-signal displays, faster RPM presentation, and a privacy-safe DTC snapshot. All 116 offline tests pass, browser visual inspection passed, and independent medium re-review approved the implementation and exact one-run procedure. No vehicle traffic was sent.",
+    "at": "2026-09-28T12:39:27-07:00",
     "evidence": [
-      "docs/PROJECT_HISTORY.md",
+      "supra_telemetry/client_dashboard.py",
+      "tests/test_client_dashboard.py",
       "docs/safety.md",
-      "docs/research.md",
-      "tests/test_read_only_cli.py"
+      "README.md"
     ]
   },
   "next_action": {
-    "summary": "Continue offline: define normal-mode M010 product behavior for presenting supported stored/pending DTC results while treating permanent-DTC service unavailability explicitly. No further vehicle command is approved.",
-    "owner": "lead",
-    "reference": "docs/roadmap.md"
+    "summary": "Run the single authorized stationary normal-mode client-dashboard rehearsal exactly as documented, then report only the privacy-safe outcome. Do not retry or run a second live demonstration without review; simulated mode is ready as the presentation fallback.",
+    "owner": "user",
+    "reference": "docs/safety.md"
   },
   "attention": [],
   "architecture": {
     "status": "aligned",
-    "summary": "The dedicated PAD comparison is a manually confirmed CLI gate over the unchanged three-read DTC engine. It adds no service, route, request, retry, session action, or vehicle-state automation and preserves source binding, privacy-safe evidence, and stop-on-first-failure behavior.",
+    "summary": "The client dashboard reserves its loopback listener before vehicle I/O, paces the fixed DTC snapshot and six-PID live schedule at a one-second request-start floor, prioritizes RPM, caps monitoring at 300 attempts and 300 seconds, and stops without retry. Simulated mode has no vehicle client or transport surface.",
     "reference": "docs/architecture.md"
   },
   "verification": {
     "status": "passed",
-    "summary": "All 101 offline tests pass. The one approved vehicle run exercised all three fixed reads and returned only the reviewed privacy-safe fields; the permanent rejection halted the command with exit code 1 and there was no retry.",
-    "verified_at": "2026-09-28T11:23:00-07:00"
+    "summary": "All 116 offline tests pass, including request pacing, listener prebinding, DTC-to-monitor gating, cleanup/redaction, concurrent API snapshots, and simulated no-I/O behavior. Browser inspection verified the responsive dashboard, six readings, faster simulated RPM, DTC groups, and explicit simulated labeling. No dashboard vehicle run has occurred.",
+    "verified_at": "2026-09-28T12:39:27-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium review approved the implementation and bounded procedure before the run and reproduced all 101 offline tests. The single empirical result must not be generalized or independently repeated."
+    "summary": "Independent medium re-review reproduced the focused dashboard tests and all 116 offline tests, approved the repaired implementation, and found the exact single-run procedure coherent. Live vehicle behavior remains unverified."
   },
   "integration": {
     "status": "synchronized",
-    "summary": "Reviewed implementation commit ab599d2 and the completed bounded vehicle-result record are synchronized to origin/main."
+    "summary": "The reviewed client-dashboard implementation, tests, procedure, and operational records are synchronized to origin/main."
   },
   "handoff": {
-    "summary": "The single approved PAD comparison is complete and must not be repeated. It did not make the permanent Mode 0A read available. The full suite, common monitor, retries, and every other vehicle command remain unapproved."
+    "summary": "Simulated mode is presentation-ready. Exactly one stationary, PAD-off live rehearsal is approved under docs/safety.md; it may attempt at most three paced DTC reads followed by 300 paced sensor requests. Stop on any error or warning, do not retry, and use simulated mode for the client if the live rehearsal is not clean."
   }
 }
 ---

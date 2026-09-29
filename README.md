@@ -49,6 +49,21 @@ vehicle-control action, and stops on the first monitoring error. The faster
 candidate has not run on the vehicle and is not currently authorized; see
 [docs/safety.md](docs/safety.md).
 
+`python -m supra_telemetry stakeholder-dashboard --capture captures/discovery.json --confirm-hands-off`
+starts the separate six-value live presentation and prints its loopback URL.
+It requires the private discovery capture, sends only the fixed six Mode 01
+reads on the verified capture-bound DME route, and performs no DTC snapshot,
+SQLite recording, sample export, raw logging, retry, reconnect, discovery, or
+vehicle control. Requests remain serialized at no more than five starts in any
+one-second window. The dashboard runs until Ctrl+C or its first acquisition
+error. Vehicle speed and RPM use their standard decoded ranges and do not stop
+the display as they rise. The confirmation means the vehicle is parked for
+launch and the driver will not view or interact with the dashboard while
+moving. On acquisition error, the dashboard closes promptly, the browser clears
+stale telemetry when its API disappears, and the CLI prints a fixed failure
+category. The command is offline-tested only and does not authorize vehicle use;
+the current no-go boundary in [docs/safety.md](docs/safety.md) still applies.
+
 `verify-gateway --capture captures/discovery.json` validates one unambiguous HSFZ discovery response and sends exactly one UDS ReadDataByIdentifier request for VIN (22 F190) to its captured diagnostic address over TCP 6801, binding the client socket to the capture's exact local interface address. If that address is no longer assigned, connection setup fails before a diagnostic request is sent. It uses tester address F4, a community-corroborated convention that Toyota has not published for this vehicle. Output contains only pass/fail status. Success verifies gateway HSFZ identity routing only; it does not establish DME addressing or support for oil temperature, coolant temperature, or any other signal. The check does not save raw exchanges.
 
 `verify-dme --capture captures/discovery.json` performs a separate single VIN read (22 F190) to candidate DME target 0x12, using the capture's peer and exact local interface binding, with tester address F4. Both routing values are community-corroborated and are not Toyota-published proof for this vehicle. Failure output uses only fixed generic reason categories; no exchange is saved. Success verifies DME identity routing only; it does not establish support for coolant/oil temperature or any other PID.

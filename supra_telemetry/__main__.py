@@ -40,6 +40,7 @@ from .storage import TelemetryStore, export_csv
 from .web import serve
 from .temperature_monitor import TemperatureMonitorSource, run_monitor
 from .client_dashboard import (DashboardLiveSource, DashboardSimSource,
+                               LIVE_FAILURES, MovingDashboardLiveSource,
                                run_live_dtc_snapshot, serve_client_dashboard,
                                SIMULATED_DTCS, reserve_dashboard_server,
                                wait_after_dtc_snapshot)
@@ -143,6 +144,13 @@ def main(argv=None):
     drive.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     drive.add_argument("--ui-host", default="127.0.0.1")
     drive.add_argument("--port", type=int, default=8765)
+    stakeholder = sub.add_parser("stakeholder-dashboard", help="manually run a loopback-only six-signal live dashboard")
+    stakeholder.add_argument("--capture", required=True, help="private discovery capture created earlier")
+    stakeholder.add_argument("--confirm-hands-off", action="store_true", required=True,
+                             help="confirm launch while parked and no driver viewing or interaction while moving")
+    stakeholder.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    stakeholder.add_argument("--ui-host", default="127.0.0.1")
+    stakeholder.add_argument("--port", type=int, default=8765)
     capture_harness = sub.add_parser("capture-harness", help="privately capture one bounded drive-session on Windows")
     capture_harness.add_argument("--capture", required=True, help="existing private discovery capture")
     capture_harness.add_argument("--output", required=True, help="fresh directory below captures/private")
@@ -238,6 +246,42 @@ def main(argv=None):
             parser.error("dashboard must bind to loopback")
         return run_drive_session(args.capture, args.db, duration=args.duration,
                                  timeout=args.timeout, host=args.ui_host, port=args.port)
+    if args.command == "stakeholder-dashboard":
+        if not 0.1 <= args.timeout <= 5.0:
+            parser.error("timeout must be between 0.1 and 5 seconds")
+        if args.ui_host not in ("127.0.0.1", "localhost", "::1"):
+            parser.error("dashboard must bind to loopback")
+        try:
+            server = reserve_dashboard_server(args.ui_host, args.port)
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "stakeholder dashboard",
+                              "reason": "dashboard-bind-failed"}))
+            return 1
+        try:
+            source = MovingDashboardLiveSource(args.capture, timeout=args.timeout, duration=None)
+        except Exception:
+            server.server_close()
+            print(json.dumps({"result": "failed", "check": "stakeholder dashboard",
+                              "reason": "source-unavailable"}))
+            return 1
+        dtcs = {"stored": None, "pending": None, "permanent": None,
+                "permanent_reason": None, "status": "not-collected"}
+        try:
+            status = serve_client_dashboard(source, mode="live", dtcs=dtcs,
+                                            host=args.ui_host, port=args.port,
+                                            duration=None, server=server,
+                                            stop_on_halt=True)
+            if status:
+                reason = getattr(source, "halt_reason", None)
+                if not isinstance(reason, str) or reason not in LIVE_FAILURES:
+                    reason = "unexpected-error"
+                print(json.dumps({"result": "failed", "check": "stakeholder dashboard",
+                                  "reason": reason}))
+            return status
+        except Exception:
+            print(json.dumps({"result": "failed", "check": "stakeholder dashboard",
+                              "reason": "dashboard-stopped"}))
+            return 1
     if args.command == "export":
         export_csv(args.database, args.destination); return 0
     if args.command == "discover":

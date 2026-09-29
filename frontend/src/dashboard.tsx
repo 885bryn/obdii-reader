@@ -68,7 +68,10 @@ function useDashboardState() {
           setApiError(false);
         }
       } catch {
-        if (active) setApiError(true);
+        if (active) {
+          setData(null);
+          setApiError(true);
+        }
       } finally {
         if (active) timer = window.setTimeout(poll, 500);
       }
@@ -291,14 +294,16 @@ export function Dashboard() {
             </div>
           </section>
 
-          <section className="dtc-section" aria-labelledby="dtc-heading">
-            <div className="section-heading"><div><p className="eyebrow">02 / DIAGNOSTIC SNAPSHOT</p><h2 id="dtc-heading">Outstanding fault codes</h2></div><Badge variant="outline" status={data?.dtcs.status === "complete" || data?.dtcs.status === "simulated" ? "success" : "warning"} intensity="medium" animated={false} className="hud-badge snapshot-badge">{data?.dtcs.status?.toUpperCase() ?? "WAITING"}</Badge></div>
-            <div className="code-grid">
-              {DTC_GROUPS.map(({ key, title }) => (
-                <CodeGroup key={key} title={title} codes={data?.dtcs[key] ?? null} reason={key === "permanent" ? data?.dtcs.permanent_reason : null} />
-              ))}
-            </div>
-          </section>
+          {data !== null && data.dtcs.status !== "not-collected" && (
+            <section className="dtc-section" aria-labelledby="dtc-heading">
+              <div className="section-heading"><div><p className="eyebrow">02 / DIAGNOSTIC SNAPSHOT</p><h2 id="dtc-heading">Outstanding fault codes</h2></div><Badge variant="outline" status={data?.dtcs.status === "complete" || data?.dtcs.status === "simulated" ? "success" : "warning"} intensity="medium" animated={false} className="hud-badge snapshot-badge">{data?.dtcs.status?.toUpperCase() ?? "WAITING"}</Badge></div>
+              <div className="code-grid">
+                {DTC_GROUPS.map(({ key, title }) => (
+                  <CodeGroup key={key} title={title} codes={data?.dtcs[key] ?? null} reason={key === "permanent" ? data?.dtcs.permanent_reason : null} />
+                ))}
+              </div>
+            </section>
+          )}
 
           <footer className="safety-note">
             <span className="safety-mark" aria-hidden="true">!</span>

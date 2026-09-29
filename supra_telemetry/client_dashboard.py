@@ -1,4 +1,4 @@
-"""Bounded loopback dashboard for a simulated demo or capture-bound live reads."""
+"""Loopback dashboards for simulated demos and capture-bound live reads."""
 import math
 import mimetypes
 import re
@@ -43,6 +43,7 @@ LIVE_FAILURES = frozenset({"timeout", "stationary-gate", "uds-rejected", "respon
 class DashboardLiveSource:
     """Paced request cadence, source-bound route, finite budget, halt on error."""
     max_duration = 300
+    allow_unbounded = False
     bounds = BOUNDS
     bounds_error_reason = "stationary-gate"
 
@@ -50,7 +51,10 @@ class DashboardLiveSource:
                  connector_factory=socket.create_connection, monotonic=time.monotonic, wait=None):
         if not 0.1 <= float(timeout) <= 5.0:
             raise ValueError("timeout must be between 0.1 and 5 seconds")
-        if not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= self.max_duration:
+        if duration is None and not self.allow_unbounded:
+            raise ValueError("duration is required for this live source")
+        if duration is not None and (not isinstance(duration, int) or isinstance(duration, bool)
+                                     or not 1 <= duration <= self.max_duration):
             raise ValueError(f"duration must be between 1 and {self.max_duration} seconds")
         peer, interface, _target, _vin = load_gateway_capture(capture)
         def bound_connector(address, connect_timeout):
@@ -60,14 +64,15 @@ class DashboardLiveSource:
                                      sock_factory=bound_connector)
         self.signals = list(SIGNALS)
         self.timeout, self.duration = float(timeout), duration
-        self._max_attempts = 5 * duration
+        self._max_attempts = 5 * duration if duration is not None else None
         self._monotonic, self._wait = monotonic, wait or time.sleep
         self._custom_wait = wait is not None
         self._stop = threading.Event()
-        self._deadline = monotonic() + duration
+        started_at = monotonic()
+        self._deadline = started_at + duration if duration is not None else math.inf
         self._started = 0
         self._tick = 0
-        self._next_slot_at = self._deadline - duration
+        self._next_slot_at = started_at
         self._last_started = None
         self._request_starts = deque()
         self._gate = threading.Lock()
@@ -93,7 +98,8 @@ class DashboardLiveSource:
     def read(self):
         if self.halted:
             return []
-        if self._started >= self._max_attempts or self._monotonic() >= self._deadline:
+        if ((self._max_attempts is not None and self._started >= self._max_attempts)
+                or self._monotonic() >= self._deadline):
             return []
         while True:
             now = self._monotonic()
@@ -120,7 +126,8 @@ class DashboardLiveSource:
         try:
             with self._gate:
                 while True:
-                    if self._stop.is_set() or self._started >= self._max_attempts:
+                    if (self._stop.is_set() or
+                            (self._max_attempts is not None and self._started >= self._max_attempts)):
                         return []
                     now = self._monotonic()
                     if now >= self._deadline:
@@ -137,7 +144,8 @@ class DashboardLiveSource:
                         self._wait(wait_for)
                     elif self._stop.wait(wait_for):
                         return []
-                if self._stop.is_set() or self._started >= self._max_attempts:
+                if (self._stop.is_set() or
+                        (self._max_attempts is not None and self._started >= self._max_attempts)):
                     return []
                 self._last_started = self._monotonic()
                 if self._last_started >= self._deadline:
@@ -181,8 +189,9 @@ class DashboardLiveSource:
 
 
 class MovingDashboardLiveSource(DashboardLiveSource):
-    """Finite drive-session source with standardized decoded moving ranges."""
+    """Moving source with standard decoded speed/RPM domains and optional duration."""
     max_duration = 1800
+    allow_unbounded = True
     bounds = {**BOUNDS, 0x0C: (0, 16383.75), 0x0D: (0, 255)}
     bounds_error_reason = "response-invalid"
 
@@ -282,7 +291,9 @@ def serve_client_dashboard(source, *, mode, dtcs, host="127.0.0.1", port=8765,
         raise ValueError("dashboard must bind to loopback")
     if mode not in ("simulated", "live"):
         raise ValueError("mode must be simulated or live")
-    if not 1 <= duration <= max_duration:
+    if duration is None and not getattr(source, "allow_unbounded", False):
+        raise ValueError("unbounded serving requires a moving live source")
+    if duration is not None and not 1 <= duration <= max_duration:
         raise ValueError(f"duration must be between 1 and {max_duration} seconds")
     from .engine import AcquisitionEngine
     server = server
@@ -303,7 +314,8 @@ def serve_client_dashboard(source, *, mode, dtcs, host="127.0.0.1", port=8765,
         worker = worker_factory(target=run_engine, daemon=True)
         worker.start()
         print(f"{mode.title()} client dashboard: http://{host}:{server.server_port}/", flush=True)
-        timer = threading.Timer(duration, server.shutdown); timer.daemon = True; timer.start()
+        if duration is not None:
+            timer = threading.Timer(duration, server.shutdown); timer.daemon = True; timer.start()
         server.serve_forever()
     except KeyboardInterrupt:
         pass

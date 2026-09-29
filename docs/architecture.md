@@ -33,6 +33,21 @@ one bounded vehicle run, and the faster schedule completed one separately
 reviewed 30-second stationary run. Neither result establishes decoded recording,
 moving-vehicle use, or a longer session.
 
+The separate `stakeholder-dashboard` command reuses the fixed moving six-PID
+source and packaged loopback presentation with standard decoded RPM and speed
+ranges. It does not run the DTC snapshot, create a SQLite store, persist or
+export samples, or expose raw logging or vehicle-control paths. Its capture-bound
+source is constructed only after the loopback listener is reserved. The
+serialized scheduler and five-request-starts-per-second limit remain in force;
+the command has no automatic duration and ends on Ctrl+C or the first
+acquisition error. On acquisition halt, it closes the dashboard promptly and
+the CLI prints a fixed allowlisted failure category. Browser polling clears the
+last snapshot after API loss so stale values cannot remain visible. Its API
+reports recording off and DTCs not collected, which also hides the DTC panel in
+this mode. This offline-reviewed command does not
+change the existing dashboard or `drive-session` safety gates and does not
+authorize vehicle use.
+
 The separate `drive-session` path reuses only that fixed six-PID scheduler and
 the already verified, capture-bound route. It deliberately omits the DTC
 snapshot, requires a new decoded-only SQLite database, and serves the same

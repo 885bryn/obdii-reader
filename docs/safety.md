@@ -8,7 +8,7 @@ Diagnostic/PAD Mode is permitted only as a manually entered vehicle state for bo
 
 ## Safe empirical procedure
 
-1. Start with the vehicle parked outdoors, parking brake set, transmission in Park (or neutral for manual), wheels chocked, and engine off. Keep a second person available; do not test while driving.
+1. Start with the vehicle parked outdoors, parking brake set, transmission in Park (or neutral for manual), wheels chocked, and engine off. Keep a second person available. Do not test while driving unless the current-authorization section contains an exact, independently reviewed moving procedure; any such exception applies only to that one bounded procedure and does not weaken the stationary default.
 2. Confirm the adapter and host OS network interface details before connecting; avoid changing vehicle state or network configuration based on guessed addresses.
 3. Run only `discover` first. Its HSFZ UDP identification request and DoIP identification broadcast are bounded and contain no diagnostic requests. Record adapter, interface, vehicle state, timestamp, and captures.
 4. Optional gateway verification: `python -m supra_telemetry verify-gateway --capture captures/discovery.json`. This validates a single captured IPv4 link-local HSFZ record, then binds TCP to that capture's exact local interface IPv4 and makes exactly one HSFZ request: UDS ReadDataByIdentifier VIN (22 F190), tester address F4, to the captured diagnostic address. A missing/stale local address fails during connection setup before a diagnostic frame is sent. F4 is corroborated by community protocol evidence; Toyota has not published this routing detail. No scan, retry, diagnostic-session request, tester-present, raw capture, or identifier output is performed. A matching response verifies only gateway HSFZ identity routing; it does not identify the DME address or establish signal/PID support. Do not run this against any vehicle without a compatible, stable ENET connection and stationary vehicle setup.
@@ -19,11 +19,11 @@ Diagnostic/PAD Mode is permitted only as a manually entered vehicle state for bo
 9. The optional one-shot temperature-values check is available as `python -m supra_telemetry read-temperature-values --capture captures/discovery.json`. It uses the same exact capture interface, peer, tester F4, DME target 0x12, and TCP 6801. It attempts at most two application requests total on one connection: exactly Mode 01 PID 05 once, then PID 5C once. Any first-request failure stops the sequence. There are no support-bitmap repeats, retries, polling, scans, tester-present messages, session changes, fault clears, routines, actuator/security requests, writes, or raw persistence. A positive response must exactly match `41 05 xx` or `41 5C xx`; each reported value is the byte minus 40 °C. Output is privacy-safe and `requests_sent` conservatively counts attempts (an upper bound when transmission is uncertain). Both values and the route have been verified with one-shot reads on this vehicle in normal engine-running mode without PAD/Diagnostic Mode. Stop on unexpected response or vehicle warning.
 10. The dedicated `monitor-temperatures --capture captures/discovery.json` path is limited to the two previously one-shot-verified standard temperature reads. It allows at most 300 seconds, with at least a 2-second idle gap after each completed two-read cycle. At the duration limit it starts no new request and closes the dashboard; an in-flight request may finish or time out before cleanup. Any request/response failure closes the dashboard and stops the command without retry. One controlled 300-second vehicle run completed on 2026-09-26 in normal engine-running mode without PAD/Diagnostic Mode, with logging off, a clean exit, and no observed acquisition or recording error. Its approximate completed-pair rate was 0.49–0.50 per second. Five chronological coolant/oil checkpoint pairs were 77/78, 79/84, 82/88, 81/90, and 83/90 °C; these are checkpoint samples, not run-wide extrema. This evidence establishes only that bounded run, not longer duration or recording. Keep any further test stationary, use the same conservative limits unless a separately reviewed procedure changes them, and stop immediately if anything unexpected occurs. The optional `--db` stores decoded samples only; logging is off by default and recording has not been vehicle-tested.
 11. The client dashboard's simulated mode opens no vehicle connection. Live mode uses only the already verified DME route and six Mode 01 PIDs. It reserves its loopback listener before any vehicle request, then attempts the existing fixed Mode 03/07/0A emissions-DTC snapshot once with at least one second between request starts. Monitoring starts only after another one-second quiet interval and either a complete snapshot or the exact previously observed partial result in which stored and pending decode successfully and permanent Mode 0A is rejected as `service-not-supported`; every other DTC outcome prevents monitor construction. The current faster monitoring candidate uses a fixed 20-slot, two-second scheduler with ten request slots: RPM `0C` four times, throttle `11` twice, and speed `0D`, intake temperature `0F`, coolant `05`, and oil temperature `5C` once each. Its 100 ms slot clock targets 0.5-second RPM, one-second throttle, and two-second supporting values while keeping requests serialized. Monitoring is bounded by 300 seconds, a rolling maximum of five request starts in any one-second window, and five attempts per selected second for at most 1,500 monitoring attempts at 300 seconds. Slow responses may reduce the achieved cadence; overdue scheduler slots are skipped rather than replayed. Values remain subject to the stationary gates, and the first monitoring error closes the connection without retry. The dashboard persists neither samples nor raw exchanges. The prior one-request-per-second schedule completed one bounded vehicle run; the faster schedule later completed one separately reviewed 30-second stationary run. Neither result authorizes a retry, recording, moving use, or a longer session.
-12. The separate `drive-session` candidate uses the same six fixed Mode 01 requests, verified capture-bound route, serialized scheduler, rolling five-starts-per-second limit, skipped overdue slots, and stop-on-first-error behavior. It sends no DTC request and exposes no retry, reconnect, discovery, address, raw-payload, session-change, clear, routine, control, or write option. It requires a new decoded-only SQLite database and serves the packaged dashboard over loopback, so internet and Codex are not runtime dependencies. The stationary dashboard gates remain unchanged; the new source permits the standard decoded RPM and speed domains and is capped at 1,800 seconds and 9,000 monitoring attempts. It records no raw exchange or route/capture identifier and prints only privacy-safe counts and achieved rates. This implementation remains vehicle-unverified. In particular, it does not establish recording behavior, moving use, or a safe 30-minute session merely because its offline tests pass.
+12. The separate `drive-session` command uses the same six fixed Mode 01 requests, verified capture-bound route, serialized scheduler, rolling five-starts-per-second limit, skipped overdue slots, and stop-on-first-error behavior. It sends no DTC request and exposes no retry, reconnect, discovery, address, raw-payload, session-change, clear, routine, control, or write option. It requires a new decoded-only SQLite database and serves the packaged dashboard over loopback, so internet and Codex are not runtime dependencies. Its source permits the standard decoded RPM and speed domains and is capped at 1,800 seconds and 9,000 monitoring attempts. It records no raw exchange or route/capture identifier and prints only privacy-safe counts and achieved rates. The completed stationary result alone did not authorize moving use; the current-authorization section now separately permits exactly one reviewed 60-second low-speed gate. It does not establish or authorize a safe 30-minute session.
 13. Do not activate generic profile-driven live `run` until routing and every request are reviewed against authoritative documentation and empirically shown to be read-only. Any transport, protocol, negative-response, or decoder error halts all later requests. Inspect the cause before starting a fresh run; in-process resume is not supported.
 14. Check that data remains plausible while stationary. For the consolidated engine-running check, vehicle speed must remain 0 km/h, RPM must be consistent with idle, intake-air temperature must be physically plausible, and throttle must remain within 0–100%; these are assessment expectations, not prior empirical verification. End the session, disconnect cleanly, and inspect results before increasing scope or rate.
 
-## Current vehicle authorization
+## Current vehicle authorization and next gate
 
 The second consolidated normal-mode run, the single conditional PAD comparison,
 and the single normal-mode client-dashboard rehearsal have ended. The dashboard
@@ -39,20 +39,93 @@ authorized stationary normal-mode run has now completed with exit code 0. The
 operator reported no vehicle warning; the application reported no acquisition
 error, and no retry or second command occurred. The dashboard did not persist an
 end-of-run rate summary, so this result does not prove the achieved display rate.
-**One vehicle command is currently authorized: the exact 60-second stationary
-recording gate below, once, on the locally merged `main` build containing
-implementation commit `fdb02f4`. No moving command is authorized.**
+The one-time stationary recording authorization has been consumed. On
+2026-09-28 the reviewed command exited 0 after 60.0 seconds and 288 requests.
+The privacy-safe counts/rates were RPM 119/1.9833 Hz, throttle 60/1.0 Hz,
+speed 22/0.3667 Hz, intake 30/0.5 Hz, coolant 27/0.45 Hz, and oil 30/0.5 Hz.
+Private local database review passed: an end timestamp was present, all speed
+samples were zero, the six counts were coherent, there were no sample/session
+errors, signal definitions were privacy-safe, and `raw_exchanges` was empty.
+No sample values or identifiers belong in tracked records.
 
-## Authorized one-time decoded-recording gate
+**One vehicle command is currently authorized: the exact one-time 60-second
+low-speed moving gate below. No retry, 300-second run, or 30-minute run is
+authorized.**
+
+### Authorized one-time 60-second low-speed moving gate
+
+1. In daylight and dry weather, preselect a legal, quiet local route with a safe
+   pull-off and a posted limit that permits remaining at or below 30 km/h. Do not
+   use a highway, enter congestion, exceed 30 km/h, accelerate aggressively, or
+   add another maneuver or test objective.
+2. Use two people. The driver controls only the vehicle and must never view,
+   touch, or operate the laptop. The front passenger is the sole operator and
+   must be able to observe the dashboard without obstructing the driver.
+3. Before starting, remain parked with the parking brake applied and transmission
+   in Park. Run the engine normally with PAD/Diagnostic Mode off. Close ISTA,
+   BimmerLink, coding tools, and every other diagnostic application. Confirm no
+   vehicle warning, normal battery condition, the existing private capture and
+   source-bound route, exactly one expected link-local adapter address, the
+   reviewed build containing `fdb02f4`, all 134 offline tests passing, and that
+   `moving-recording-60s.sqlite` does not exist. Do not rediscover, scan,
+   substitute an address, or run another vehicle command in the same session.
+4. Secure the laptop and adapter on the passenger side. Route and secure the
+   cable completely away from pedals, steering, the driver's legs, seat travel,
+   and other controls; verify it cannot be pinched by a door, window, or seat.
+   If safe routing is uncertain, do not run. Toyota's stationary ISTA service
+   instructions warn that pinching or disconnecting its Supra diagnostic cable
+   can cause communication or ECU damage; those instructions do not approve
+   moving use, so this physical gate is mandatory.
+5. While still parked, the passenger runs exactly:
+
+   ```powershell
+   python -m supra_telemetry drive-session --capture captures/discovery.json --db moving-recording-60s.sqlite --duration 60 --confirm-hands-off
+   ```
+
+   The passenger opens the printed `127.0.0.1` URL and confirms `RECORDING`,
+   fresh live values, zero speed, and plausible idle data before telling the
+   driver to begin the preselected route. Internet and Codex are not required.
+6. During the run, the driver follows the route and remains at or below 30 km/h.
+   The passenger watches only for the recording indicator, fresh plausible data,
+   and an application error. Any vehicle warning, unsafe traffic/weather/route
+   condition, missing or stale display, browser/API failure, timeout, transport
+   or decoder error, implausible value, recording error, adapter/cable problem,
+   or speed above 30 km/h fails the gate. The driver pulls over safely; once safe,
+   the passenger presses `Ctrl+C` if the process has not stopped. Do not retry,
+   change PAD state, or run another vehicle command.
+7. After automatic completion, park safely before the passenger handles or
+   disconnects equipment. Keep the capture and SQLite file local. Share only
+   the privacy-safe final JSON, request count, per-signal counts/rates, fixed
+   error category, and post-run gate pass/fail results.
+8. The private database review must confirm: one finalized session; exactly the
+   six expected signals; positive counts for each signal; the six counts sum to
+   the reported request count and the reported rates agree with counts/duration;
+   no sample or session error; at least one speed sample above 0 km/h; every
+   speed sample between 0 and 30 km/h; privately reviewed RPM, temperature, and
+   throttle chronology is plausible for the bounded route; signal definitions
+   contain no route/request/target identifiers; and `raw_exchanges` is empty.
+   Any failed gate ends the candidate with no retry.
+
+Even if independently approved and completed cleanly, this first moving gate
+will not authorize another moving command. A separate exact 300-second moving
+stage and its private post-run review are required before a 30-minute procedure
+can be considered.
+
+A 30-minute run remains blocked. The first moving gate and a separate exact
+300-second stage must pass, and a separately reviewed exact 1,800-second
+procedure is required. Toyota PDS battery guidance describes stationary
+PAD/ISTA service work; it does not establish a safe battery or telemetry
+duration while driving.
+
+## Completed one-time decoded-recording gate (historical)
 
 The exact implementation and procedure passed independent medium review, all
 134 offline Python tests, the production frontend build, and installable-wheel
-inspection, and were merged to local `main`. This authorizes one 60-second
-stationary validation of the new decoded-only recording path. A clean result
-will establish only that one stationary session; it will not authorize driving,
-a retry, or a longer duration.
+inspection, and were merged to local `main`. The one authorized stationary
+validation is complete; this historical procedure no longer authorizes another
+run, driving, or a longer duration.
 
-The authorized one-time procedure is:
+The completed one-time procedure was:
 
 1. Park outdoors, apply the parking brake, select Park, chock the wheels, and
    keep a second person available. Start the engine normally with PAD/Diagnostic
@@ -72,7 +145,7 @@ The authorized one-time procedure is:
    shows `RECORDING`, fresh live values, zero speed, and plausible idle data while
    the vehicle remains parked.
 
-The authorized command is:
+The command used was:
 
 ```powershell
 python -m supra_telemetry drive-session --capture captures/discovery.json --db stationary-recording-60s.sqlite --duration 60 --confirm-hands-off
@@ -94,8 +167,9 @@ all six expected signals have coherent counts and achieved rates, no sample or
 session error was recorded, signal definitions contain no route/request/target
 identifiers, and `raw_exchanges` is empty. Report only pass/fail for those gates
 plus the command's privacy-safe counts/rates; do not copy sample values, database
-rows, or identifiers into tracked documentation. Until that review passes and a
-new moving procedure is independently reviewed, no road command is authorized.
+rows, or identifiers into tracked documentation. Those gates have since passed,
+and the exact 60-second moving procedure in the current-authorization section is
+the only road command now authorized; this historical command cannot be repeated.
 
 ## Completed faster-cadence validation
 

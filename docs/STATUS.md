@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "handoff",
   "health": "healthy",
-  "updated_at": "2026-09-28T20:40:47-07:00",
+  "updated_at": "2026-09-28T21:12:00-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,31 +23,30 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-9",
-      "title": "Prepare a bounded moving-vehicle telemetry validation",
+      "id": "T009-10",
+      "title": "Review a graduated moving-vehicle telemetry validation",
       "status": "in_progress",
       "path": "docs/roadmap.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "The offline drive-session candidate now provides a loopback dashboard with a visible recording state, mandatory decoded-only SQLite persistence, a 30-minute automatic ceiling, bounded interruptible shutdown, privacy-safe summaries and metadata, and stop-on-first-error behavior. All 134 offline tests, the production frontend build, installable-wheel inspection, and independent medium review passed without sending vehicle traffic.",
-    "at": "2026-09-28T20:33:23-07:00",
+    "summary": "The one authorized 60-second stationary drive-session recording gate completed with exit code 0 and 288 requests. Its private local SQLite review passed every required gate: finalized session, exactly zero vehicle speed, coherent samples for all six signals, no recorded errors, privacy-safe signal definitions, and no raw exchanges. This establishes only that stationary session and does not authorize moving use or a longer run.",
+    "at": "2026-09-28T21:01:12-07:00",
     "evidence": [
-      "tests/test_drive_session.py",
-      "frontend/src/dashboard.tsx",
-      "supra_telemetry/drive_session.py",
-      "docs/safety.md"
+      "docs/research.md",
+      "docs/safety.md",
+      "tests/test_drive_session.py"
     ]
   },
   "next_action": {
-    "summary": "On the other computer, pull origin/main and verify it contains implementation commit fdb02f4 and authorization commit b15c491. Then run the exact one-time 60-second stationary recording gate while parked and return only its privacy-safe final JSON so the Lead can inspect the local SQLite gate before any moving procedure is considered.",
+    "summary": "Run only the independently approved one-time 60-second, at-or-below-30-km/h moving procedure with a dedicated passenger operator, secured cable/equipment, stop/no-retry rules, and a fresh database. Then park and perform its private post-run review before any further vehicle command.",
     "owner": "user",
     "reference": "docs/safety.md"
   },
   "attention": [
-    "Only the exact one-time 60-second stationary recording command in docs/safety.md is authorized.",
-    "No moving command, retry, or longer run is authorized.",
-    "A clean 60-second stationary recording gate and its private post-run database review are required before any moving procedure can be considered."
+    "The one-time stationary recording authorization has been consumed and passed; do not repeat it.",
+    "Only the exact one-time 60-second low-speed moving command in docs/safety.md is authorized.",
+    "A 30-minute run remains blocked pending successful 60-second and separately reviewed 300-second moving stages, longer-session power/session guidance, and separate review of an exact 1,800-second procedure."
   ],
   "architecture": {
     "status": "aligned",
@@ -56,19 +55,19 @@
   },
   "verification": {
     "status": "passed",
-    "summary": "All 134 offline Python tests passed again on merged local main, including the blocked-request and normal-timer shutdown regressions. The production frontend build, repaired installable-wheel inspection, and git diff validation passed. No vehicle traffic was sent.",
-    "verified_at": "2026-09-28T20:36:16-07:00"
+    "summary": "All 134 offline Python tests passed immediately before the vehicle gate. The exact 60-second stationary command then completed with exit code 0, and the private SQLite review passed every required recording, speed, error, metadata, and raw-exchange gate.",
+    "verified_at": "2026-09-28T21:01:12-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium re-review approved the offline implementation and proposed separately gated 60-second stationary procedure after verifying bounded shutdown, intentional-stop handling, decoded-recording privacy, and the private post-run database checks."
+    "summary": "Independent medium re-review approved the exact one-time 60-second low-speed moving procedure after verifying the driver/passenger separation, at-or-below-30-km/h bound, secured cable/equipment gate, exact command, stop/no-retry process, and private database acceptance checks. This approval does not extend to 300 seconds or 30 minutes."
   },
   "integration": {
-    "status": "synchronized",
-    "summary": "The reviewed drive-session implementation at fdb02f4 and its authorization record at b15c491 are pushed to origin/main for use on the other computer."
+    "status": "pending",
+    "summary": "The verified stationary result and proposed next-stage procedure are being reconciled locally and have not yet been committed or pushed."
   },
   "handoff": {
-    "summary": "The offline implementation is verified, independently approved, merged, and synchronized to origin/main. The other computer must pull and verify the authorized commits before running the one exact 60-second stationary recording gate. No moving command is authorized until its private database review passes and a new moving procedure is reviewed."
+    "summary": "The stationary gate and its private database review passed. One exact 60-second low-speed moving gate is now independently approved for a single run under docs/safety.md; no retry or longer moving run is authorized. The 30-minute run remains blocked by the required 300-second stage and longer-session guidance."
   }
 }
 ---

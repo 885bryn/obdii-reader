@@ -4,7 +4,9 @@ import json
 import re
 import tempfile
 import threading
+import time
 import unittest
+from collections import deque
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError
@@ -41,6 +43,47 @@ def dashboard_bundle():
 
 
 class ClientDashboardTests(unittest.TestCase):
+    def test_close_interrupts_blocked_request_without_waiting_for_request_gate(self):
+        with tempfile.TemporaryDirectory() as td:
+            entered, release = threading.Event(), threading.Event()
+            close_calls = []
+            class BlockingClient:
+                connected = True
+                def request(self, _payload):
+                    entered.set()
+                    release.wait(2)
+                    return b"\x41\x0c\x0d\x48"
+                def close(self): close_calls.append(True); release.set()
+            client = BlockingClient()
+            source = DashboardLiveSource.__new__(DashboardLiveSource)
+            source.client = client
+            source.signals = list(SIGNALS)
+            source.timeout, source.duration = 1.0, 4
+            source._max_attempts, source._monotonic = 20, time.monotonic
+            source._wait, source._custom_wait = time.sleep, False
+            source._stop, source._deadline = threading.Event(), time.monotonic() + 4
+            source._started, source._tick = 0, 0
+            source._next_slot_at, source._last_started = time.monotonic(), None
+            source._request_starts, source._gate = deque(), threading.Lock()
+            source._close_gate = threading.Lock()
+            source._closed, source.halted = False, False
+            source.halt_reason, source.connected = None, False
+            reader = threading.Thread(target=source.read, daemon=True)
+            reader.start()
+            self.assertTrue(entered.wait(1), "request did not begin")
+            closer = threading.Thread(target=source.close, daemon=True)
+            closer.start()
+            closer.join(0.2)
+            try:
+                self.assertFalse(closer.is_alive(), "close waited for the blocked request gate")
+                self.assertTrue(release.is_set(), "client.close was not called promptly")
+                source.close()
+                self.assertEqual(len(close_calls), 1, "source.close must remain idempotent")
+            finally:
+                release.set()
+                closer.join(1)
+                reader.join(1)
+
     def make_source(self, path, clock, calls, *, duration=300, wait=None, response=None):
         class Client:
             connected = True

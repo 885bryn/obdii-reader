@@ -43,6 +43,7 @@ from .client_dashboard import (DashboardLiveSource, DashboardSimSource,
                                run_live_dtc_snapshot, serve_client_dashboard,
                                SIMULATED_DTCS, reserve_dashboard_server,
                                wait_after_dtc_snapshot)
+from .drive_session import run_drive_session
 
 
 def demo_signals():
@@ -132,6 +133,15 @@ def main(argv=None):
     client_dashboard.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     client_dashboard.add_argument("--ui-host", default="127.0.0.1")
     client_dashboard.add_argument("--port", type=int, default=8765)
+    drive = sub.add_parser("drive-session", help="bounded offline local dashboard and decoded-only moving telemetry recording")
+    drive.add_argument("--capture", required=True, help="private discovery capture created earlier")
+    drive.add_argument("--db", required=True, help="new SQLite database path; existing files are refused")
+    drive.add_argument("--confirm-hands-off", action="store_true", required=True,
+                       help="confirm launch while parked and no driver viewing or interaction while moving")
+    drive.add_argument("--duration", type=int, default=1800, help="automatic stop (1 to 1800 seconds)")
+    drive.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
+    drive.add_argument("--ui-host", default="127.0.0.1")
+    drive.add_argument("--port", type=int, default=8765)
     disc = sub.add_parser("discover", help="bounded HSFZ UDP and DoIP discovery; sends no diagnostics")
     disc.add_argument("--interface", required=True, help="local IPv4 address to bind")
     disc.add_argument("--timeout", type=float, default=.6); disc.add_argument("--broadcast", default="169.254.255.255"); disc.add_argument("--json"); disc.add_argument("--redact-console", action="store_true", help="redact vehicle and network identifiers from console JSON")
@@ -188,6 +198,15 @@ def main(argv=None):
     exp = sub.add_parser("export", help="export recorded SQLite samples to CSV")
     exp.add_argument("database"); exp.add_argument("destination")
     args = parser.parse_args(argv)
+    if args.command == "drive-session":
+        if not 1 <= args.duration <= 1800:
+            parser.error("duration must be between 1 and 1800 seconds")
+        if not 0.1 <= args.timeout <= 5.0:
+            parser.error("timeout must be between 0.1 and 5 seconds")
+        if args.ui_host not in ("127.0.0.1", "localhost", "::1"):
+            parser.error("dashboard must bind to loopback")
+        return run_drive_session(args.capture, args.db, duration=args.duration,
+                                 timeout=args.timeout, host=args.ui_host, port=args.port)
     if args.command == "export":
         export_csv(args.database, args.destination); return 0
     if args.command == "discover":

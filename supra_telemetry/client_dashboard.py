@@ -37,17 +37,21 @@ SIGNALS = (
 )
 BY_PID = {0x0C: SIGNALS[0], 0x0D: SIGNALS[1], 0x0F: SIGNALS[2], 0x11: SIGNALS[3], 0x05: SIGNALS[4], 0x5C: SIGNALS[5]}
 BOUNDS = {0x0C: (300, 2500), 0x0D: (0, 0), 0x0F: (-40, 120), 0x11: (0, 100), 0x05: (-40, 120), 0x5C: (-40, 210)}
-LIVE_FAILURES = frozenset({"timeout", "stationary-gate", "uds-rejected", "response-invalid", "connection-or-transport"})
+LIVE_FAILURES = frozenset({"timeout", "stationary-gate", "uds-rejected", "response-invalid", "connection-or-transport", "recording-error"})
 
 
 class DashboardLiveSource:
     """Paced request cadence, source-bound route, finite budget, halt on error."""
+    max_duration = 300
+    bounds = BOUNDS
+    bounds_error_reason = "stationary-gate"
+
     def __init__(self, capture, *, timeout=2.0, duration=300, client_factory=HsfzClient,
                  connector_factory=socket.create_connection, monotonic=time.monotonic, wait=None):
         if not 0.1 <= float(timeout) <= 5.0:
             raise ValueError("timeout must be between 0.1 and 5 seconds")
-        if not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= 300:
-            raise ValueError("duration must be between 1 and 300 seconds")
+        if not isinstance(duration, int) or isinstance(duration, bool) or not 1 <= duration <= self.max_duration:
+            raise ValueError(f"duration must be between 1 and {self.max_duration} seconds")
         peer, interface, _target, _vin = load_gateway_capture(capture)
         def bound_connector(address, connect_timeout):
             return connector_factory(address, connect_timeout, source_address=(interface, 0))
@@ -67,6 +71,7 @@ class DashboardLiveSource:
         self._last_started = None
         self._request_starts = deque()
         self._gate = threading.Lock()
+        self._close_gate = threading.Lock()
         self._closed = False
         self.halted = False
         self.halt_reason = None
@@ -74,7 +79,9 @@ class DashboardLiveSource:
 
     def close(self):
         self._stop.set()
-        with self._gate:
+        # HsfzClient.close is designed to interrupt an in-flight receive and
+        # must not wait on the request serialization gate held by read().
+        with self._close_gate:
             if not self._closed:
                 self.client.close()
                 self._closed = True
@@ -142,14 +149,20 @@ class DashboardLiveSource:
                 raise ConnectionError("negative response")
             value = (parse_temperature_response(response, pid) if pid in (0x05, 0x5C)
                      else parse_value_response(response, pid)[0])
-            low, high = BOUNDS[pid]
+            low, high = self.bounds[pid]
             if not low <= value <= high:
-                raise ValueError("stationary-gate")
+                raise ValueError(self.bounds_error_reason)
             self.connected = bool(getattr(self.client, "connected", False))
             signal = BY_PID[pid]
             return [Sample(signal.id, value, signal.unit, "hsfz", "measured", "good",
                            utc_now(), time.monotonic_ns())]
         except Exception as exc:
+            if self._stop.is_set():
+                # A normal bounded-session shutdown closes the client to
+                # interrupt an in-flight receive. Treat that cancellation as
+                # end-of-stream; errors observed before shutdown still halt.
+                self.connected = False
+                return []
             self.halted = True
             message = str(exc)
             self.halt_reason = ("stationary-gate" if message == "stationary-gate" else
@@ -165,6 +178,13 @@ class DashboardLiveSource:
             signal = BY_PID[pid]
             return [Sample(signal.id, None, signal.unit, "hsfz", "measured", "error",
                            utc_now(), time.monotonic_ns(), self.halt_reason)]
+
+
+class MovingDashboardLiveSource(DashboardLiveSource):
+    """Finite drive-session source with standardized decoded moving ranges."""
+    max_duration = 1800
+    bounds = {**BOUNDS, 0x0C: (0, 16383.75), 0x0D: (0, 255)}
+    bounds_error_reason = "response-invalid"
 
 
 class DashboardSimSource:
@@ -256,13 +276,14 @@ def make_dashboard_handler(engine, source, mode, dtcs):
 
 
 def serve_client_dashboard(source, *, mode, dtcs, host="127.0.0.1", port=8765,
-                           duration=300, worker_factory=threading.Thread, server=None):
+                           duration=300, worker_factory=threading.Thread, server=None,
+                           stop_on_halt=False, max_duration=300):
     if host not in ("127.0.0.1", "localhost", "::1"):
         raise ValueError("dashboard must bind to loopback")
     if mode not in ("simulated", "live"):
         raise ValueError("mode must be simulated or live")
-    if not 1 <= duration <= 300:
-        raise ValueError("duration must be between 1 and 300 seconds")
+    if not 1 <= duration <= max_duration:
+        raise ValueError(f"duration must be between 1 and {max_duration} seconds")
     from .engine import AcquisitionEngine
     server = server
     timer = worker = None
@@ -275,7 +296,11 @@ def serve_client_dashboard(source, *, mode, dtcs, host="127.0.0.1", port=8765,
             server = ThreadingHTTPServer((host, port), Handler)
         else:
             server.RequestHandlerClass = Handler
-        worker = worker_factory(target=engine.run, args=(stop,), daemon=True)
+        def run_engine():
+            engine.run(stop)
+            if stop_on_halt and engine.halted and server is not None:
+                server.shutdown()
+        worker = worker_factory(target=run_engine, daemon=True)
         worker.start()
         print(f"{mode.title()} client dashboard: http://{host}:{server.server_port}/", flush=True)
         timer = threading.Timer(duration, server.shutdown); timer.daemon = True; timer.start()
@@ -339,10 +364,11 @@ def dashboard_state(engine, source, mode, dtcs):
         latest = ()
     samples = [{**vars(sample), "age_ms": max(0, (now - sample.monotonic_ns) // 1_000_000)}
                for sample in latest]
-    reason = getattr(source, "halt_reason", None)
+    reason = "recording-error" if engine.recording_error else getattr(source, "halt_reason", None)
     if reason not in LIVE_FAILURES:
         reason = "unexpected-error" if engine.halted or source.halted else None
     return {"mode": mode,
+            "recording": bool(engine.store is not None and not engine.halted),
             "connection": "running" if mode == "simulated" else "connected" if source.connected else "waiting",
             "halted": engine.halted or source.halted,
             "acquisition_error": reason,

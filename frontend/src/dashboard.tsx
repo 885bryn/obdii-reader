@@ -28,6 +28,7 @@ type DtcSnapshot = {
 
 type DashboardState = {
   mode: "live" | "simulated";
+  recording?: boolean;
   connection: string;
   halted: boolean;
   acquisition_error: string | null;
@@ -273,7 +274,7 @@ export function Dashboard() {
 
               <Card intensity="medium" className="acquisition-card">
                 <CardContent className="acquisition-content">
-                  <div className="acquisition-heading"><span className="eyebrow">ACQUISITION</span><span className={`acquisition-lamp ${data?.halted || apiError ? "is-error" : ""}`} aria-hidden="true" /></div>
+                  <div className="acquisition-heading"><span className="eyebrow">ACQUISITION</span>{data?.recording && <span className="eyebrow recording-indicator">RECORDING</span>}<span className={`acquisition-lamp ${data?.halted || apiError ? "is-error" : ""}`} aria-hidden="true" /></div>
                   <p className="acquisition-status">{connection.toUpperCase()}</p>
                   <p className="acquisition-detail">{apiError ? "State endpoint not responding." : data?.halted ? `Monitoring stopped · ${data.acquisition_error ?? "unknown error"}` : mode === "simulated" ? "Local demo data · no ECU connection" : mode === "live" ? "Read-only session · safe values only" : "Waiting for dashboard state"}</p>
                 </CardContent>

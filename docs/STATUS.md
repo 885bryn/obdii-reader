@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "idle",
+  "workflow_stage": "merge",
   "health": "healthy",
-  "updated_at": "2026-09-28T20:01:34-07:00",
+  "updated_at": "2026-09-28T20:33:23-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,29 +23,31 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-8",
-      "title": "Redesign the client dashboard interface",
-      "status": "closed",
+      "id": "T009-9",
+      "title": "Prepare a bounded moving-vehicle telemetry validation",
+      "status": "reviewed",
       "path": "docs/roadmap.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "The laptop-first client dashboard now presents coolant and oil temperatures as the dominant metrics, keeps RPM secondary, and labels outstanding fault codes with source-verified descriptions while explicitly declining to guess unknown codes. The packaged React build passed offline verification, browser inspection, wheel inspection, and independent review without changing vehicle acquisition behavior.",
-    "at": "2026-09-28T18:00:48-07:00",
+    "summary": "The offline drive-session candidate now provides a loopback dashboard with a visible recording state, mandatory decoded-only SQLite persistence, a 30-minute automatic ceiling, bounded interruptible shutdown, privacy-safe summaries and metadata, and stop-on-first-error behavior. All 134 offline tests, the production frontend build, installable-wheel inspection, and independent medium review passed without sending vehicle traffic.",
+    "at": "2026-09-28T20:33:23-07:00",
     "evidence": [
-      "tests/test_client_dashboard.py",
+      "tests/test_drive_session.py",
       "frontend/src/dashboard.tsx",
-      "docs/PROJECT_HISTORY.md"
+      "supra_telemetry/drive_session.py",
+      "docs/safety.md"
     ]
   },
   "next_action": {
-    "summary": "Add a privacy-safe end-of-run cadence summary offline before proposing any further vehicle dashboard run. No vehicle command is currently authorized.",
-    "owner": "lead",
+    "summary": "Choose how to integrate the reviewed drive-session changes. After the exact build and procedure are synchronized, the Lead may activate the single 60-second stationary recording gate; no moving command is authorized.",
+    "owner": "user",
     "reference": "docs/safety.md"
   },
   "attention": [
     "No vehicle command is currently authorized.",
-    "The bounded run completed cleanly, but achieved sample rates were not persisted or captured after shutdown."
+    "The reviewed implementation and stationary procedure are not yet synchronized.",
+    "A clean 60-second stationary recording gate and its private post-run database review are required before any moving procedure can be considered."
   ],
   "architecture": {
     "status": "aligned",
@@ -54,19 +56,19 @@
   },
   "verification": {
     "status": "passed",
-    "summary": "All 122 offline Python tests and frontend type checking pass. The production frontend build and Python wheel packaging succeeded, packaged static assets and third-party notices were inspected, the simulated dashboard was visually inspected in-browser, and no vehicle traffic was sent.",
-    "verified_at": "2026-09-28T18:00:48-07:00"
+    "summary": "All 134 offline Python tests passed, including the blocked-request and normal-timer shutdown regressions. The production frontend build and repaired installable-wheel inspection passed, and git diff validation was clean. No vehicle traffic was sent.",
+    "verified_at": "2026-09-28T20:33:23-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent light review approved the repaired dashboard after verifying fault-description behavior, temperature prominence, asset-serving boundaries, notice packaging, and correct warning/error sample states."
+    "summary": "Independent medium re-review approved the offline implementation and proposed separately gated 60-second stationary procedure after verifying bounded shutdown, intentional-stop handling, decoded-recording privacy, and the private post-run database checks."
   },
   "integration": {
-    "status": "synchronized",
-    "summary": "The reviewed dashboard redesign is synchronized to origin/main in commit 0d852f8."
+    "status": "unmerged",
+    "summary": "T009-9 changes are reviewed and verified on local branch codex/offline-drive-session but are not yet committed or synchronized."
   },
   "handoff": {
-    "summary": "The reviewed laptop dashboard redesign is synchronized to origin/main in commit 0d852f8. No vehicle command is currently authorized; the next work is an offline cadence-summary improvement."
+    "summary": "T009-9 offline implementation and the proposed stationary gate are verified and independently approved. Integration and synchronization are next; no vehicle command is authorized until they complete."
   }
 }
 ---

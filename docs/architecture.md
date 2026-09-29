@@ -29,8 +29,24 @@ request starts in any one-second window, and at most 1,500 attempts for 300
 seconds. Stationary gates apply to every value, and the first error closes the
 source without retry. Slow responses may reduce the achieved cadence; overdue
 scheduler slots are skipped rather than replayed. The preceding one-request-per-second schedule completed
-one bounded vehicle run; this faster schedule is offline-tested only and is not
-currently authorized for vehicle use.
+one bounded vehicle run, and the faster schedule completed one separately
+reviewed 30-second stationary run. Neither result establishes decoded recording,
+moving-vehicle use, or a longer session.
+
+The separate `drive-session` path reuses only that fixed six-PID scheduler and
+the already verified, capture-bound route. It deliberately omits the DTC
+snapshot, requires a new decoded-only SQLite database, and serves the same
+packaged dashboard over loopback with an explicit recording indicator. Its
+moving policy changes only the RPM and speed bounds to their standard decoded
+domains; the stationary dashboard's zero-speed and idle-RPM gates remain
+unchanged. The command is capped at 1,800 seconds and five starts per selected
+second, skips overdue slots, never retries or reconnects, and shuts down on the
+first acquisition, decoding, or recording error. Its privacy-safe final summary
+contains request and sample counts plus achieved rates, never values, raw
+exchanges, capture contents, or route identifiers. The implementation is
+offline-capable because the Python runtime and dashboard assets are local, but
+offline verification alone does not authorize a stationary or moving vehicle
+run.
 
 The installed Python runtime depends only on the standard library; React, Tailwind,
 Farstar source components, game-hud, and Motion are build-time frontend inputs

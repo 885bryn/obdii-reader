@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "handoff",
   "health": "healthy",
-  "updated_at": "2026-09-28T15:43:10-07:00",
+  "updated_at": "2026-09-28T18:00:48-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,25 +23,25 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-7",
-      "title": "Validate faster client-dashboard cadence",
-      "status": "completed",
+      "id": "T009-8",
+      "title": "Redesign the client dashboard interface",
+      "status": "reviewed",
       "path": "docs/roadmap.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "The single authorized stationary, engine-idling, PAD-off faster-cadence validation completed its 30-second request-start bound with exit code 0. The operator reported no vehicle warning, the application reported no acquisition error, and no retry or other vehicle command occurred. No end-of-run rate summary was persisted.",
-    "at": "2026-09-28T15:43:10-07:00",
+    "summary": "The laptop-first client dashboard now presents coolant and oil temperatures as the dominant metrics, keeps RPM secondary, and labels outstanding fault codes with source-verified descriptions while explicitly declining to guess unknown codes. The packaged React build passed offline verification, browser inspection, wheel inspection, and independent review without changing vehicle acquisition behavior.",
+    "at": "2026-09-28T18:00:48-07:00",
     "evidence": [
-      "docs/research.md",
-      "docs/safety.md",
+      "tests/test_client_dashboard.py",
+      "frontend/src/dashboard.tsx",
       "docs/PROJECT_HISTORY.md"
     ]
   },
   "next_action": {
-    "summary": "Add a privacy-safe end-of-run cadence summary offline before proposing any further vehicle dashboard run. No vehicle command is currently authorized.",
-    "owner": "lead",
-    "reference": "docs/safety.md"
+    "summary": "Review the running simulated dashboard on the laptop and report any desired visual adjustments; after acceptance, commit and synchronize the reviewed implementation.",
+    "owner": "user",
+    "reference": "README.md"
   },
   "attention": [
     "No vehicle command is currently authorized.",
@@ -49,24 +49,24 @@
   ],
   "architecture": {
     "status": "aligned",
-    "summary": "The candidate uses a 20-slot, two-second serialized scheduler targeting RPM every 0.5 seconds, throttle every second, and four supporting values every two seconds. It retains a 300-second wall limit, a rolling five-starts-per-second ceiling, a 1,500-attempt total ceiling, skipped overdue slots, stationary gates, and stop-on-first-error behavior. Simulated mode has no vehicle client or transport surface.",
+    "summary": "The telemetry and safety architecture is unchanged. A compiled React frontend is served by the existing loopback-only Python server, and the privacy-safe /api/state contract remains the sole browser data source. The installed Python runtime remains standard-library-only.",
     "reference": "docs/architecture.md"
   },
   "verification": {
     "status": "passed",
-    "summary": "All 117 offline tests pass. Independent review and fresh verification approved the faster scheduler and exact 30-second procedure. The one live validation exited 0 with no reported warning or acquisition error; achieved per-signal rates were not retained.",
-    "verified_at": "2026-09-28T15:35:35-07:00"
+    "summary": "All 122 offline Python tests and frontend type checking pass. The production frontend build and Python wheel packaging succeeded, packaged static assets and third-party notices were inspected, the simulated dashboard was visually inspected in-browser, and no vehicle traffic was sent.",
+    "verified_at": "2026-09-28T18:00:48-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium review approved the faster scheduler after repair, and a separate independent review approved the exact 30-second one-run vehicle-validation procedure after correcting its DTC and browser-failure wording."
+    "summary": "Independent light review approved the repaired dashboard after verifying fault-description behavior, temperature prominence, asset-serving boundaries, notice packaging, and correct warning/error sample states."
   },
   "integration": {
-    "status": "synchronized",
-    "summary": "The completed faster-cadence result and revoked one-time authorization are synchronized to origin/main in commit 7cbc95b."
+    "status": "unmerged",
+    "summary": "The reviewed dashboard redesign remains uncommitted in the current working tree pending user visual acceptance."
   },
   "handoff": {
-    "summary": "The one-time 30-second faster-cadence validation is complete and must not be repeated. It exited cleanly with no reported vehicle warning, but no end-of-run rate summary was retained. No vehicle command is currently authorized."
+    "summary": "The reviewed laptop dashboard is running in simulated mode for user inspection. It uses no vehicle connection. Report any visual changes before the implementation is committed and synchronized."
   }
 }
 ---

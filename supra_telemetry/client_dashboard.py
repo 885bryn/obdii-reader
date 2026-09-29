@@ -1,11 +1,15 @@
 """Bounded loopback dashboard for a simulated demo or capture-bound live reads."""
 import math
+import mimetypes
+import re
 import socket
 import threading
 import time
 from collections import deque
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
 
 from .common_dme_values import parse_value_response
 from .dme_check import DME_TARGET_ADDRESS
@@ -210,24 +214,43 @@ def safe_dtc_snapshot(result=None, error=None):
             "permanent": result["permanent_dtcs"], "permanent_reason": None, "status": "complete"}
 
 
-HTML = r'''<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GR Supra | Telemetry</title><style>
-:root{color-scheme:dark;--bg:#08111c;--panel:#111e2b;--line:#26384a;--muted:#91a5b8;--cyan:#52d6e8;--amber:#ffc36a;--red:#ff7d7d}*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -20%,#1b3850,var(--bg) 55%);color:#f1f6fa;font:16px Inter,system-ui,Segoe UI,sans-serif}header{display:flex;justify-content:space-between;align-items:center;padding:22px clamp(18px,5vw,70px);border-bottom:1px solid #ffffff12}.brand{font-size:18px;font-weight:750;letter-spacing:.04em}.sub{color:var(--muted);font-size:12px;margin-top:4px}.badges{display:flex;gap:10px;align-items:center}.badge{border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-size:11px;font-weight:800;letter-spacing:.1em}.live{color:var(--cyan);border-color:#286778}.sim{color:var(--amber);border-color:#72582f}.wrap{max-width:1240px;margin:30px auto;padding:0 20px}.top{display:grid;grid-template-columns:minmax(280px,.95fr) 1.4fr;gap:18px}.panel,.metric{background:linear-gradient(145deg,#142434,#0f1b27);border:1px solid var(--line);border-radius:18px}.hero{padding:24px;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px}.eyebrow{color:var(--muted);font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}.gauge{width:min(300px,90%);aspect-ratio:1.8;overflow:hidden;position:relative;margin:12px 0}.arc{position:absolute;width:100%;height:200%;border:16px solid #24394b;border-bottom-color:transparent;border-radius:50%;top:0}.arc:after{content:"";position:absolute;inset:-16px;border:16px solid transparent;border-top-color:var(--cyan);border-radius:50%;transform:rotate(var(--angle,-135deg));transition:transform .5s}.rpm{font-size:clamp(48px,7vw,78px);font-weight:800;letter-spacing:-.06em;line-height:1}.unit{font-size:12px;color:var(--muted);letter-spacing:.12em}.herofoot{display:flex;justify-content:space-between;width:90%;margin-top:20px;color:var(--muted);font-size:12px}.metrics{display:grid;grid-template-columns:repeat(2,minmax(145px,1fr));gap:14px}.metric{padding:19px;min-height:130px}.metric .value{font-size:32px;font-weight:750;margin:17px 0 5px;letter-spacing:-.04em}.metric .unit{letter-spacing:0}.fresh{color:var(--muted);font-size:11px}.section{margin-top:20px;padding:21px}.sectionhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.section h2{font-size:14px;letter-spacing:.1em;text-transform:uppercase;margin:0}.codes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.codebox{padding:15px;background:#0b1621;border:1px solid var(--line);border-radius:12px}.codebox h3{font-size:12px;color:var(--muted);margin:0 0 12px;text-transform:uppercase;letter-spacing:.1em}.code{font:700 17px ui-monospace,monospace;margin:5px 4px 0 0;display:inline-block}.empty{color:#72869a;font-size:13px}.foot{color:#71859a;text-align:center;font-size:11px;margin:24px}.error{color:var(--red)}@media(max-width:760px){.top{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,1fr)}.codes{grid-template-columns:1fr}.hero{min-height:260px}header{align-items:flex-start;gap:12px;flex-direction:column}}
-</style></head><body><header><div><div class="brand">GR SUPRA <span style="color:#607d94">/</span> TELEMETRY</div><div class="sub">Read only vehicle overview</div></div><div class="badges"><span class="badge" id="mode">CONNECTING</span><span class="badge" id="status">STARTING</span></div></header><main class="wrap"><div class="top"><section class="panel hero"><div class="eyebrow">Engine speed</div><div class="gauge"><div class="arc" id="arc"></div></div><div class="rpm" id="rpm">—</div><div class="unit">REVOLUTIONS PER MINUTE</div><div class="herofoot"><span id="rpmfresh">Waiting for RPM</span><span>0—7,000 RPM</span></div></section><section class="metrics" id="metrics"></section></div><section class="panel section"><div class="sectionhead"><h2>Emissions fault snapshot</h2><span class="sub" id="dtcstatus"></span></div><div class="codes" id="codes"></div></section><div class="foot" id="notice">Only verified Mode 01 values. No fault clearing or vehicle controls.</div></main><script>
-const labels={vehicle_speed:['Vehicle speed','km/h'],coolant_temp:['Coolant temperature','°C'],engine_oil_temp:['Engine oil temperature','°C'],intake_air_temperature:['Intake air temperature','°C'],throttle_position:['Throttle position','%']};function age(s){return s?`${s.age_ms} ms old${s.observed_hz?` · ${s.observed_hz.toFixed(2)} Hz`:''}`:'Waiting for sample'}async function update(){try{const d=await(await fetch('/api/state')).json();const mode=document.querySelector('#mode');mode.textContent=d.mode==='simulated'?'SIMULATED':'LIVE';mode.className='badge '+(d.mode==='simulated'?'sim':'live');document.querySelector('#status').textContent=d.halted?'HALTED':d.connection.toUpperCase();document.querySelector('#status').className='badge '+(d.halted?'error':'');const by=Object.fromEntries(d.samples.map(s=>[s.signal_id,s]));const rpm=by.engine_rpm;document.querySelector('#rpm').textContent=rpm?.value??'—';document.querySelector('#arc').style.setProperty('--angle',`${-135+Math.max(0,Math.min(1,(rpm?.value||0)/7000))*270}deg`);document.querySelector('#rpmfresh').textContent=age(rpm);const root=document.querySelector('#metrics');root.replaceChildren();for(const [id,[name,unit]] of Object.entries(labels)){const s=by[id],card=document.createElement('article');card.className='metric';const eyebrow=document.createElement('div');eyebrow.className='eyebrow';eyebrow.textContent=name;const value=document.createElement('div');value.className='value';value.textContent=s?.value??'—';const units=document.createElement('div');units.className='unit';units.textContent=unit;const fresh=document.createElement('div');fresh.className='fresh';fresh.textContent=age(s);card.append(eyebrow,value,units,fresh);root.append(card)}const groups=document.querySelector('#codes');groups.replaceChildren();for(const [key,title] of [['stored','Stored'],['pending','Pending'],['permanent','Permanent']]){const box=document.createElement('div');box.className='codebox';const h=document.createElement('h3');h.textContent=title;box.append(h);const codes=d.dtcs[key];if(codes===null){const n=document.createElement('span');n.className='empty';n.textContent=key==='permanent'&&d.dtcs.permanent_reason?`Unavailable · ${d.dtcs.permanent_reason}`:'Unavailable';box.append(n)}else if(!codes.length){const n=document.createElement('span');n.className='empty';n.textContent='No codes reported';box.append(n)}else for(const c of codes){const n=document.createElement('span');n.className='code';n.textContent=c;box.append(n)}groups.append(box)}document.querySelector('#dtcstatus').textContent=d.dtcs.status.toUpperCase();document.querySelector('#notice').textContent=d.mode==='simulated'?'SIMULATED DATA · Values and sample fault codes are illustrative. No vehicle connection is opened.':'LIVE DATA · Target intervals: RPM 0.5s, throttle 1s, other sensors 2s. Slow ECU responses may reduce the actual update rate.';if(d.halted)document.querySelector('#notice').textContent+=` Acquisition stopped: ${d.acquisition_error||'unknown error'}`}catch(e){document.querySelector('#status').textContent='API UNAVAILABLE'}}update();setInterval(update,500)
-</script></body></html>'''
+STATIC_ROOT = Path(__file__).with_name("dashboard_static")
+HTML = (STATIC_ROOT / "index.html").read_text(encoding="utf-8")
 
 
 def make_dashboard_handler(engine, source, mode, dtcs):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
-            if self.path == "/":
+            request_path = urlsplit(self.path).path
+            if request_path == "/":
                 data, content = HTML.encode(), "text/html; charset=utf-8"
-            elif self.path == "/api/state":
+                cache = "no-cache"
+            elif request_path == "/api/state":
                 data = json.dumps(dashboard_state(engine, source, mode, dtcs)).encode()
-                content = "application/json"
+                content, cache = "application/json", "no-store"
+            elif request_path.startswith("/assets/"):
+                filename = unquote(request_path.removeprefix("/assets/"))
+                if (not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", filename)
+                        or filename in {".", ".."}):
+                    self.send_error(404); return
+                assets_root = (STATIC_ROOT / "assets").resolve()
+                try:
+                    asset = (assets_root / filename).resolve(strict=True)
+                    asset.relative_to(assets_root)
+                    if not asset.is_file():
+                        raise FileNotFoundError
+                    data = asset.read_bytes()
+                except (OSError, ValueError):
+                    self.send_error(404); return
+                content = mimetypes.guess_type(asset.name)[0] or "application/octet-stream"
+                if content == "text/javascript":
+                    content = "text/javascript; charset=utf-8"
+                elif content.startswith("text/"):
+                    content += "; charset=utf-8"
+                cache = "public, max-age=31536000, immutable"
             else:
                 self.send_error(404); return
-            self.send_response(200); self.send_header("Content-Type", content); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
+            self.send_response(200); self.send_header("Content-Type", content); self.send_header("Cache-Control", cache); self.send_header("Content-Length", str(len(data))); self.end_headers(); self.wfile.write(data)
         def log_message(self, *_): pass
     return Handler
 

@@ -24,10 +24,18 @@ mode opens no vehicle connection and is the safe presentation fallback:
 python -m supra_telemetry client-dashboard --mode simulated --duration 300
 ```
 
-It shows a large RPM gauge, vehicle speed, coolant temperature, engine-oil
-temperature, intake-air temperature, throttle position, and an explicitly
-simulated emissions-fault snapshot. RPM updates about five times per second in
-simulated mode while the supporting values update about once per second.
+It gives coolant and engine-oil temperature the two largest displays, with RPM,
+vehicle speed, intake-air temperature, and throttle position as supporting
+telemetry. The outstanding-fault-code snapshot keeps each code visible and adds
+an allowlisted plain-English description when one has been source-verified;
+unknown or manufacturer-specific codes are never guessed. RPM updates about five
+times per second in simulated mode while the supporting values update about once
+per second.
+
+The presentation is a Vite-built React application under `frontend/`. Its built
+assets are checked into `supra_telemetry/dashboard_static` so the installed
+Python runtime remains dependency-free. Rebuild after frontend changes with
+`npm ci` and `npm run build` from `frontend/`.
 
 Live mode first takes one fixed Mode 03/07/0A fault snapshot, then uses only the
 six already verified Mode 01 PIDs on the capture-bound DME route. One bounded

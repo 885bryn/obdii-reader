@@ -1,11 +1,13 @@
 import contextlib
 import io
 import json
+import re
 import tempfile
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from urllib.error import HTTPError
 from urllib.request import urlopen
 from unittest.mock import patch
 
@@ -13,6 +15,7 @@ from supra_telemetry.client_dashboard import (
     BOUNDS, HTML, SCHEDULE, SIGNALS, DashboardLiveSource, DashboardSimSource,
     dashboard_state, make_dashboard_handler, run_live_dtc_snapshot, safe_dtc_snapshot,
     reserve_dashboard_server, serve_client_dashboard, wait_after_dtc_snapshot,
+    STATIC_ROOT,
 )
 from supra_telemetry.engine import AcquisitionEngine
 from supra_telemetry.models import Sample
@@ -28,6 +31,13 @@ def capture(directory):
         "identification": {"vin": vin, "mac": mac, "diagnostic_address": 16},
         "raw_hex": packet.hex()}]}), encoding="utf-8")
     return path
+
+
+def dashboard_bundle():
+    script = re.search(r'<script[^>]+src="\./(assets/[^\"]+\.js)"', HTML)
+    if script is None:
+        raise AssertionError("compiled dashboard entrypoint is missing")
+    return STATIC_ROOT.joinpath(*script.group(1).split("/")).read_text(encoding="utf-8")
 
 
 class ClientDashboardTests(unittest.TestCase):
@@ -202,9 +212,32 @@ class ClientDashboardTests(unittest.TestCase):
         self.assertEqual(got, {"stored": ["P0420"], "pending": ["U0123"],
                                "permanent": None, "permanent_reason": "service-not-supported",
                                "status": "partial"})
-        self.assertIn("SIMULATED", HTML)
-        self.assertIn("No fault clearing", HTML)
-        self.assertIn("permanent_reason", HTML)
+        bundle = dashboard_bundle()
+        self.assertIn("SIMULATED", bundle)
+        self.assertIn("No fault clearing", bundle)
+        self.assertIn("permanent_reason", bundle)
+
+    def test_dtc_display_uses_only_allowlisted_descriptions_and_unknown_fallback(self):
+        mapping = (Path(__file__).parents[1] / "frontend" / "src" / "lib" / "dtc-descriptions.ts").read_text(encoding="utf-8")
+        mapped_codes = re.findall(r"^\s*([PBCU][0-9A-F]{4}):", mapping, re.MULTILINE)
+        self.assertEqual(mapped_codes, ["P0420"])
+        self.assertIn("SAE J2012", mapping)
+        self.assertIn("https://law.resource.org/pub/us/cfr/ibr/005/sae.j2012.2002.pdf", mapping)
+        self.assertIn('"Catalyst system efficiency below threshold (Bank 1)"', mapping)
+        bundle = dashboard_bundle()
+        self.assertIn("Outstanding fault codes", bundle)
+        self.assertNotIn("Emissions fault codes", bundle)
+        self.assertIn("Description unavailable", bundle)
+        self.assertIn("Catalyst system efficiency below threshold (Bank 1)", bundle)
+        self.assertIn("code-value", bundle)
+        self.assertIn("SAMPLE ERROR", bundle)
+        self.assertIn("NO SAMPLE", bundle)
+        self.assertIn("VERIFIED SIGNAL", bundle)
+
+    def test_temperature_missing_and_error_samples_are_not_success_states(self):
+        frontend = (Path(__file__).parents[1] / "frontend" / "src" / "dashboard.tsx").read_text(encoding="utf-8")
+        self.assertIn('const sampleStatus = !sample || sample.quality === "simulated" ? "warning"', frontend)
+        self.assertIn('sample.quality === "good" && sample.value !== null ? "success" : "error"', frontend)
 
         with patch("supra_telemetry.client_dashboard.read_emissions_dtcs",
                    side_effect=RuntimeError("private socket details")):
@@ -247,6 +280,50 @@ class ClientDashboardTests(unittest.TestCase):
             self.assertEqual(payload["dtcs"]["stored"], ["P0420"])
         finally:
             server.shutdown(); thread.join(2); server.server_close()
+
+    def test_http_serves_bundled_dashboard_assets_and_rejects_traversal(self):
+        source = DashboardSimSource()
+        engine = AcquisitionEngine(source=source)
+        handler = make_dashboard_handler(engine, source, "simulated", {
+            "stored": [], "pending": [], "permanent": [],
+            "permanent_reason": None, "status": "simulated"})
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        base = f"http://127.0.0.1:{server.server_port}"
+        try:
+            with urlopen(base + "/", timeout=2) as response:
+                html = response.read().decode("utf-8")
+                self.assertEqual(response.headers.get_content_type(), "text/html")
+                self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
+            self.assertIn("GR Supra", html)
+            asset = re.search(r'(?:src|href)="\./(assets/[^\"]+\.js)"', html)
+            self.assertIsNotNone(asset)
+            with urlopen(base + "/" + asset.group(1), timeout=2) as response:
+                self.assertEqual(response.headers.get_content_type(), "text/javascript")
+                self.assertIn("immutable", response.headers.get("Cache-Control", ""))
+                self.assertGreater(len(response.read()), 1000)
+            with self.assertRaises(HTTPError) as failure:
+                urlopen(base + "/assets/%2e%2e%2fpyproject.toml", timeout=2)
+            self.assertEqual(failure.exception.code, 404)
+        finally:
+            server.shutdown(); thread.join(2); server.server_close()
+
+    def test_primary_temperature_type_scale_dominates_rpm(self):
+        styles = (Path(__file__).parents[1] / "frontend" / "src" / "index.css").read_text(encoding="utf-8")
+        temperature = re.search(r"\.temp-value\s*\{[^}]*font-size:\s*clamp\(\s*(\d+)px,[^,]+,\s*(\d+)px\)", styles)
+        rpm = re.search(r"\.rpm-value\s*\{[^}]*font-size:\s*clamp\(\s*(\d+)px,[^,]+,\s*(\d+)px\)", styles)
+        self.assertIsNotNone(temperature)
+        self.assertIsNotNone(rpm)
+        self.assertGreater(int(temperature.group(2)), int(rpm.group(2)))
+
+    def test_third_party_notice_is_a_persistent_build_and_package_asset(self):
+        project_root = Path(__file__).parents[1]
+        source_notice = project_root / "frontend" / "public" / "THIRD_PARTY_NOTICES.txt"
+        built_notice = STATIC_ROOT / "THIRD_PARTY_NOTICES.txt"
+        self.assertEqual(source_notice.read_bytes(), built_notice.read_bytes())
+        package_config = (project_root / "pyproject.toml").read_text(encoding="utf-8")
+        self.assertIn('"dashboard_static/THIRD_PARTY_NOTICES.txt"', package_config)
 
     def test_simulated_source_has_exact_six_ids_and_no_network_surface(self):
         source = DashboardSimSource(monotonic=lambda: 2.0)

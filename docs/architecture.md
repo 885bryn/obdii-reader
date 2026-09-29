@@ -7,7 +7,12 @@ The intended flow is profile → policy → transport → UDS correlation/decode
 Dedicated discovery commands use the private capture's exact local source and peer plus the already verified DME route. They expose no raw-payload surface. The consolidated read-only suite sequences four independently bounded phases with a total ceiling of 20 requests and a two-second stop window between successful phases. It stops all later phases after the first failure and rebuilds any failure output from strict per-phase allowlists. The live DTC path uses explicit count-prefixed framing, validates the decoded count and trailing zero padding, and does not infer framing from payload parity. Direct negative responses must be exactly three bytes and correlated to the requested service; only fixed rejection categories can cross the public error boundary. Malformed pending replies fail as invalid, while raw replies, numeric response codes, transport details, and exception text remain private. The policy accepts only fixed-shape Mode 01, single-byte Mode 03/07/0A reads, Mode 09, UDS 0x22, and internal 0x3E; state-changing Mode 04, Mode 08, session control, routines, security access, and writes remain rejected.
 
 The client dashboard has separate simulated and live sources behind one
-loopback-only presentation. Simulated mode has no transport/client surface. Live
+loopback-only presentation. A Vite-built React frontend consumes only the
+privacy-safe `/api/state` response and is packaged as local static assets; the
+Python server restricts browser assets to its generated asset directory. The
+presentation uses source-owned Farstar registry components, game-hud styles,
+and Motion transitions while keeping coolant and oil temperature visually
+dominant over RPM. Simulated mode has no transport/client surface. Live
 startup first reserves the loopback listener, before any vehicle I/O, then runs
 the existing three-read emissions-DTC snapshot once with at least one second
 between request starts. It waits another full second before constructing
@@ -27,4 +32,6 @@ scheduler slots are skipped rather than replayed. The preceding one-request-per-
 one bounded vehicle run; this faster schedule is offline-tested only and is not
 currently authorized for vehicle use.
 
-All core dependencies come from Python's standard library. Each vehicle request must be serialized. Use monotonic time for scheduling/freshness and UTC wall time for durable event records. Sample and cycle rates are measured from monotonic timestamps; the first observation has no rate. The dedicated common-DME monitor spaces every request start by at least one second, enforces a duration-derived ceiling of no more than 300 attempts, and stops on a stationary-gate or acquisition failure. SQLite signal definitions are scoped to sessions and retain the service/request, target address, decoder offset/width/byte order/signedness, scale, offset, provenance, and verification metadata. The dedicated monitors store decoded samples and non-identifying definitions without raw exchanges; CSV retains the session id and observed sample rate. Configuration is declarative JSON, fully checked before any socket client is constructed, and contains no executable expressions.
+The installed Python runtime depends only on the standard library; React, Tailwind,
+Farstar source components, game-hud, and Motion are build-time frontend inputs
+whose compiled assets ship inside the Python package. Each vehicle request must be serialized. Use monotonic time for scheduling/freshness and UTC wall time for durable event records. Sample and cycle rates are measured from monotonic timestamps; the first observation has no rate. The dedicated common-DME monitor spaces every request start by at least one second, enforces a duration-derived ceiling of no more than 300 attempts, and stops on a stationary-gate or acquisition failure. SQLite signal definitions are scoped to sessions and retain the service/request, target address, decoder offset/width/byte order/signedness, scale, offset, provenance, and verification metadata. The dedicated monitors store decoded samples and non-identifying definitions without raw exchanges; CSV retains the session id and observed sample rate. Configuration is declarative JSON, fully checked before any socket client is constructed, and contains no executable expressions.

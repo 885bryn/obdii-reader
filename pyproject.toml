@@ -11,3 +11,6 @@ dependencies = []
 
 [tool.setuptools]
 packages = ["supra_telemetry"]
+
+[tool.setuptools.package-data]
+supra_telemetry = ["dashboard_static/index.html", "dashboard_static/THIRD_PARTY_NOTICES.txt", "dashboard_static/assets/*"]

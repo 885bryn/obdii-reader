@@ -15,7 +15,7 @@ Reproduce the useful diagnostic and monitoring capabilities of BimmerLink for th
 ### Recorded backlog
 
 - Validate the offline-tested decoded-sample SQLite recording and CSV export in the planned 60-second stationary common-DME run; recording remains unverified on the vehicle.
-- Add dashboard personalization, gauges, layouts, and useful minimum/maximum presentation.
+- Extend the dashboard with user-selectable layouts and useful session minimum/maximum presentation.
 - Add live data from additional control units only after their routes, identifiers, formulas, and limits are established on this vehicle.
 - Investigate read-only ZF 8HP adaptation values only if the vehicle has the applicable transmission and authoritative or empirical evidence establishes the exact route and decoding.
 - Consider a simplified driving display after the diagnostic foundation. Native CarPlay or Android Auto integration is a separate future architecture decision.

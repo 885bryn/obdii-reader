@@ -19,7 +19,7 @@ Diagnostic/PAD Mode is permitted only as a manually entered vehicle state for bo
 9. The optional one-shot temperature-values check is available as `python -m supra_telemetry read-temperature-values --capture captures/discovery.json`. It uses the same exact capture interface, peer, tester F4, DME target 0x12, and TCP 6801. It attempts at most two application requests total on one connection: exactly Mode 01 PID 05 once, then PID 5C once. Any first-request failure stops the sequence. There are no support-bitmap repeats, retries, polling, scans, tester-present messages, session changes, fault clears, routines, actuator/security requests, writes, or raw persistence. A positive response must exactly match `41 05 xx` or `41 5C xx`; each reported value is the byte minus 40 °C. Output is privacy-safe and `requests_sent` conservatively counts attempts (an upper bound when transmission is uncertain). Both values and the route have been verified with one-shot reads on this vehicle in normal engine-running mode without PAD/Diagnostic Mode. Stop on unexpected response or vehicle warning.
 10. The dedicated `monitor-temperatures --capture captures/discovery.json` path is limited to the two previously one-shot-verified standard temperature reads. It allows at most 300 seconds, with at least a 2-second idle gap after each completed two-read cycle. At the duration limit it starts no new request and closes the dashboard; an in-flight request may finish or time out before cleanup. Any request/response failure closes the dashboard and stops the command without retry. One controlled 300-second vehicle run completed on 2026-09-26 in normal engine-running mode without PAD/Diagnostic Mode, with logging off, a clean exit, and no observed acquisition or recording error. Its approximate completed-pair rate was 0.49–0.50 per second. Five chronological coolant/oil checkpoint pairs were 77/78, 79/84, 82/88, 81/90, and 83/90 °C; these are checkpoint samples, not run-wide extrema. This evidence establishes only that bounded run, not longer duration or recording. Keep any further test stationary, use the same conservative limits unless a separately reviewed procedure changes them, and stop immediately if anything unexpected occurs. The optional `--db` stores decoded samples only; logging is off by default and recording has not been vehicle-tested.
 11. The client dashboard's simulated mode opens no vehicle connection. Live mode uses only the already verified DME route and six Mode 01 PIDs. It reserves its loopback listener before any vehicle request, then attempts the existing fixed Mode 03/07/0A emissions-DTC snapshot once with at least one second between request starts. Monitoring starts only after another one-second quiet interval and either a complete snapshot or the exact previously observed partial result in which stored and pending decode successfully and permanent Mode 0A is rejected as `service-not-supported`; every other DTC outcome prevents monitor construction. The current faster monitoring candidate uses a fixed 20-slot, two-second scheduler with ten request slots: RPM `0C` four times, throttle `11` twice, and speed `0D`, intake temperature `0F`, coolant `05`, and oil temperature `5C` once each. Its 100 ms slot clock targets 0.5-second RPM, one-second throttle, and two-second supporting values while keeping requests serialized. Monitoring is bounded by 300 seconds, a rolling maximum of five request starts in any one-second window, and five attempts per selected second for at most 1,500 monitoring attempts at 300 seconds. Slow responses may reduce the achieved cadence; overdue scheduler slots are skipped rather than replayed. Values remain subject to the stationary gates, and the first monitoring error closes the connection without retry. The dashboard persists neither samples nor raw exchanges. The prior one-request-per-second schedule completed one bounded vehicle run; the faster schedule later completed one separately reviewed 30-second stationary run. Neither result authorizes a retry, recording, moving use, or a longer session.
-12. The separate `drive-session` command uses the same six fixed Mode 01 requests, verified capture-bound route, serialized scheduler, rolling five-starts-per-second limit, skipped overdue slots, and stop-on-first-error behavior. It sends no DTC request and exposes no retry, reconnect, discovery, address, raw-payload, session-change, clear, routine, control, or write option. It requires a new decoded-only SQLite database and serves the packaged dashboard over loopback, so internet and Codex are not runtime dependencies. Its source permits the standard decoded RPM and speed domains and is capped at 1,800 seconds and 9,000 monitoring attempts. It records no raw exchange or route/capture identifier and prints only privacy-safe counts and achieved rates. The stationary and 60-second moving gates are complete; the later 300-second candidate failed its reviewed speed ceiling. Exactly one 30-minute normal-driving session is currently authorized by the reviewed procedure below; no retry is authorized.
+12. The separate `drive-session` command uses the same six fixed Mode 01 requests, verified capture-bound route, serialized scheduler, rolling five-starts-per-second limit, skipped overdue slots, and stop-on-first-error behavior. It sends no DTC request and exposes no retry, reconnect, discovery, address, raw-payload, session-change, clear, routine, control, or write option. It requires a new decoded-only SQLite database and serves the packaged dashboard over loopback, so internet and Codex are not runtime dependencies. Its source permits the standard decoded RPM and speed domains and is capped at 1,800 seconds and 9,000 monitoring attempts. It records no raw exchange or route/capture identifier and prints only privacy-safe counts and achieved rates. The stationary, 60-second moving, 300-second moving, and one-time 30-minute procedures are consumed. The 30-minute candidate stopped after 568.64 seconds on a vehicle-speed timeout. No moving command or raw-capture run is currently authorized.
 13. Do not activate generic profile-driven live `run` until routing and every request are reviewed against authoritative documentation and empirically shown to be read-only. Any transport, protocol, negative-response, or decoder error halts all later requests. Inspect the cause before starting a fresh run; in-process resume is not supported.
 14. Check that data remains plausible while stationary. For the consolidated engine-running check, vehicle speed must remain 0 km/h, RPM must be consistent with idle, intake-air temperature must be physically plausible, and throttle must remain within 0–100%; these are assessment expectations, not prior empirical verification. End the session, disconnect cleanly, and inspect results before increasing scope or rate.
 
@@ -66,9 +66,14 @@ plausible timestamp and non-speed-signal chronology, privacy-safe definitions,
 and no raw exchanges. However, at least one recorded speed sample exceeded the
 reviewed 30 km/h ceiling. The speed gate and overall procedure therefore failed.
 
-**One vehicle command is currently authorized: the exact one-time 30-minute
-normal-driving procedure below. Do not retry either consumed moving procedure,
-and do not repeat the 30-minute command.**
+The one-time 30-minute candidate later stopped fail-closed after 568.64 seconds
+when a vehicle-speed request timed out. Its private database was finalized and
+passed integrity, chronology, decoded-domain, privacy, and empty-raw-exchange
+checks apart from the single allowlisted timeout row. The dashboard disappeared
+because acquisition halt shuts down the loopback server.
+
+**No vehicle command or raw-capture run is currently authorized. Do not repeat
+the consumed 30-minute command.**
 
 ### Completed one-time 60-second low-speed moving gate (historical)
 
@@ -155,7 +160,7 @@ then-current rule; it is not a software or database failure. Toyota PDS battery
 guidance describes stationary PAD/ISTA service work; it does not establish a
 safe battery or telemetry duration while driving.
 
-### Authorized one-time 30-minute normal-driving procedure
+### Completed one-time 30-minute normal-driving procedure (historical)
 
 The user has selected ordinary lawful driving as the intended validation
 condition. This procedure removes the test-specific 30 km/h ceiling: the driver
@@ -168,7 +173,8 @@ duration gate. The software still caps a session at 1,800 seconds and 9,000
 monitoring attempts.
 
 Independent medium review approved this exact procedure and the current
-implementation for one run. The single authorized run requires:
+implementation for one run. That authorization has been consumed. Its historical
+requirements were:
 
 1. A competent two-person operation during an ordinary lawful trip. The driver
    operates only the car and never views, touches, or operates the laptop. A
@@ -210,9 +216,10 @@ implementation for one run. The single authorized run requires:
    candidate with no retry. Report only redacted pass/fail outcomes and
    privacy-safe counts/rates, never sample values or identifiers.
 
-The 1,800-second software ceiling and 9,000-attempt cap bound the command; they
-do not establish sustained vehicle, battery, or bus behavior. This authorization
-covers exactly one run under the stated gates and no retry.
+The run stopped after 568.64 seconds when one vehicle-speed request timed out.
+The 1,800-second software ceiling and 9,000-attempt cap bounded the command but
+did not establish sustained vehicle, battery, or bus behavior. The consumed
+authorization covers no retry.
 
 ## Completed one-time decoded-recording gate (historical)
 
@@ -267,9 +274,8 @@ plus the command's privacy-safe counts/rates; do not copy sample values, databas
 rows, or identifiers into tracked documentation. Those gates later passed and
 enabled the now-consumed 60-second moving gate. The subsequent 300-second
 candidate failed its reviewed speed ceiling, so that historical command cannot
-be repeated. Exactly one separately reviewed 30-minute normal-driving command
-is now authorized in the current-authorization section above; it also cannot be
-repeated.
+be repeated. The later one-time 30-minute command also stopped fail-closed and
+cannot be repeated. No vehicle command is currently authorized.
 
 ## Completed faster-cadence validation
 

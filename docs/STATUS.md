@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "handoff",
-  "health": "healthy",
-  "updated_at": "2026-09-28T22:21:48-07:00",
+  "workflow_stage": "verification",
+  "health": "attention",
+  "updated_at": "2026-09-28T23:01:47-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,15 +23,15 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-13",
-      "title": "Review a normal-driving 30-minute telemetry validation",
+      "id": "T009-14",
+      "title": "Investigate the interrupted 30-minute drive session",
       "status": "in_progress",
       "path": "docs/roadmap.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "The one authorized 300-second moving command completed at the application level with exit code 0 and 1,443 requests, but its private audit failed the reviewed speed ceiling because at least one sample exceeded 30 km/h. All other summary, error, chronology, privacy, and raw-exchange gates passed. The no-retry rule ended that candidate; at that point no 30-minute run had been authorized.",
-    "at": "2026-09-28T21:43:36-07:00",
+    "summary": "The one-time 30-minute normal-driving candidate stopped fail-closed after 568.64 seconds when a vehicle-speed request timed out. The private SQLite database is integral and finalized with 2,716 rows, one allowlisted timeout row, no other sample errors, valid chronology and decoded domains before the failure, privacy-safe signal definitions, and no raw exchanges.",
+    "at": "2026-09-28T23:01:47-07:00",
     "evidence": [
       "docs/research.md",
       "docs/safety.md",
@@ -39,16 +39,17 @@
     ]
   },
   "next_action": {
-    "summary": "Run only the independently approved one-time 30-minute normal-driving procedure using lawful posted speeds and ordinary road conditions, a passenger operator, secured equipment, stop/no-retry behavior, and a fresh database. Then park and complete the private audit.",
-    "owner": "user",
+    "summary": "Investigate the timeout offline and design and independently review any new bounded read-only diagnostic run before vehicle use. Any raw capture must remain private, narrowly filtered, and excluded from Git and GitHub.",
+    "owner": "lead",
     "reference": "docs/safety.md"
   },
   "attention": [
     "The one-time stationary recording authorization has been consumed and passed; do not repeat it.",
     "The one-time 60-second moving authorization has been consumed and passed; do not repeat it.",
     "The one-time 300-second authorization was consumed and failed its then-current artificial speed-ceiling audit; do not repeat it.",
-    "The user has specified normal lawful driving as the intended product condition, with no artificial test speed cap.",
-    "Only the exact one-time 30-minute normal-driving command in docs/safety.md is authorized; no retry is authorized."
+    "The one-time 30-minute normal-driving authorization was consumed and stopped on a vehicle-speed timeout after 568.64 seconds; do not repeat it.",
+    "No vehicle command or raw-capture run is currently authorized.",
+    "The private moving-recording-30min.sqlite file remains Git-ignored. Before continuing on another computer, the user will transfer it privately outside Git/GitHub and place it in the repository root for local inspection."
   ],
   "architecture": {
     "status": "aligned",
@@ -56,20 +57,20 @@
     "reference": "docs/architecture.md"
   },
   "verification": {
-    "status": "partial",
-    "summary": "The 300-second command exited 0 and passed all application, recording, chronology, privacy, and raw-exchange checks. It failed only the former 30 km/h procedural ceiling, which the user has since rejected as unrepresentative of ordinary lawful driving. This does not itself authorize a longer run.",
-    "verified_at": "2026-09-28T21:43:36-07:00"
+    "status": "failed",
+    "summary": "The 30-minute candidate stopped after 568.64 seconds on one allowlisted vehicle-speed timeout. The dashboard became unavailable because the application correctly halted acquisition and shut down its loopback server. The partial database passed integrity, finalization, privacy, chronology, and pre-error decoded-domain checks.",
+    "verified_at": "2026-09-28T23:01:47-07:00"
   },
   "review": {
-    "status": "approved",
-    "summary": "Independent medium review approved exactly one 30-minute normal-driving procedure after checking the fixed six-signal capture-bound path, 1,800-second/9,000-attempt caps, serialized request rate, stop-on-error behavior, decoded-only storage, passenger operation, physical preflight, and private audit. No retry is approved."
+    "status": "pending",
+    "summary": "The approved one-time procedure was consumed. A retry with private packet capture would be a new procedure and is not authorized until its capture scope, privacy handling, bounds, and stop conditions are independently reviewed."
   },
   "integration": {
     "status": "pending",
-    "summary": "The stationary, 60-second moving, and 300-second results are committed locally through a53ad9b, but remote publication was not authorized. The reviewed normal-driving acceptance decision and one-time 30-minute procedure are reconciled in current local changes."
+    "summary": "Tracked code and documentation are ready for remote publication. Private SQLite databases and captures remain ignored and must be transferred between computers outside Git/GitHub."
   },
   "handoff": {
-    "summary": "The stationary and 60-second moving gates passed. The 300-second application/recording result was clean but failed its former artificial 30 km/h procedure and cannot be retried. The user specified ordinary lawful driving as the intended condition, and exactly one 30-minute command is now independently approved under docs/safety.md."
+    "summary": "The one-time 30-minute candidate stopped fail-closed after 568.64 seconds on a vehicle-speed timeout; no retry is authorized. The private moving-recording-30min.sqlite file is not in Git. The user must transfer it privately to any other development computer before resuming this investigation."
   }
 }
 ---

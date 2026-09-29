@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "verification",
   "health": "attention",
-  "updated_at": "2026-09-29T00:51:16-07:00",
+  "updated_at": "2026-09-29T00:56:32-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -68,8 +68,8 @@
     "summary": "The approved one-time procedure was consumed. No new procedure exists to review. A retry with private packet capture would be a new procedure and is not authorized until its capture scope, privacy handling, bounds, and stop conditions are independently reviewed."
   },
   "integration": {
-    "status": "unmerged",
-    "summary": "The offline audit documentation is a local tracked change not yet committed or synchronized. The private SQLite database remains ignored and must stay outside Git/GitHub."
+    "status": "synchronized",
+    "summary": "The redacted offline audit documentation is committed and synchronized to origin/main. The private SQLite database remains ignored and must stay outside Git/GitHub."
   },
   "handoff": {
     "summary": "The one-time 30-minute candidate stopped fail-closed after 568.64 seconds on a vehicle-speed timeout; no retry is authorized. Its private database is now present locally and ignored by Git. Offline evidence isolates expiration of the configured two-second HSFZ response deadline but cannot identify the underlying ECU, response, link, adapter, cable, or network cause without new evidence."

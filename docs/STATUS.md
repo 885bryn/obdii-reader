@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "verification",
-  "health": "attention",
-  "updated_at": "2026-09-28T21:43:36-07:00",
+  "workflow_stage": "handoff",
+  "health": "healthy",
+  "updated_at": "2026-09-28T22:21:48-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,14 +23,14 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-10",
-      "title": "Review a graduated moving-vehicle telemetry validation",
+      "id": "T009-13",
+      "title": "Review a normal-driving 30-minute telemetry validation",
       "status": "in_progress",
       "path": "docs/roadmap.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "The one authorized 300-second moving command completed at the application level with exit code 0 and 1,443 requests, but its private audit failed the reviewed speed ceiling because at least one sample exceeded 30 km/h. All other summary, error, chronology, privacy, and raw-exchange gates passed. The no-retry rule ended the candidate; no 30-minute run is authorized.",
+    "summary": "The one authorized 300-second moving command completed at the application level with exit code 0 and 1,443 requests, but its private audit failed the reviewed speed ceiling because at least one sample exceeded 30 km/h. All other summary, error, chronology, privacy, and raw-exchange gates passed. The no-retry rule ended that candidate; at that point no 30-minute run had been authorized.",
     "at": "2026-09-28T21:43:36-07:00",
     "evidence": [
       "docs/research.md",
@@ -39,16 +39,16 @@
     ]
   },
   "next_action": {
-    "summary": "Stop vehicle testing and reassess the moving-validation design offline. Do not retry the 300-second command or start the 30-minute run.",
-    "owner": "lead",
+    "summary": "Run only the independently approved one-time 30-minute normal-driving procedure using lawful posted speeds and ordinary road conditions, a passenger operator, secured equipment, stop/no-retry behavior, and a fresh database. Then park and complete the private audit.",
+    "owner": "user",
     "reference": "docs/safety.md"
   },
   "attention": [
     "The one-time stationary recording authorization has been consumed and passed; do not repeat it.",
     "The one-time 60-second moving authorization has been consumed and passed; do not repeat it.",
-    "The one-time 300-second authorization was consumed and failed its speed-ceiling audit; do not repeat it.",
-    "No vehicle command is currently authorized.",
-    "A 30-minute run is blocked."
+    "The one-time 300-second authorization was consumed and failed its then-current artificial speed-ceiling audit; do not repeat it.",
+    "The user has specified normal lawful driving as the intended product condition, with no artificial test speed cap.",
+    "Only the exact one-time 30-minute normal-driving command in docs/safety.md is authorized; no retry is authorized."
   ],
   "architecture": {
     "status": "aligned",
@@ -56,20 +56,20 @@
     "reference": "docs/architecture.md"
   },
   "verification": {
-    "status": "failed",
-    "summary": "The 300-second command exited 0 and its recording/privacy checks passed, but private read-only inspection found that at least one vehicle-speed sample exceeded the reviewed 30 km/h ceiling. The procedural gate therefore failed.",
+    "status": "partial",
+    "summary": "The 300-second command exited 0 and passed all application, recording, chronology, privacy, and raw-exchange checks. It failed only the former 30 km/h procedural ceiling, which the user has since rejected as unrepresentative of ordinary lawful driving. This does not itself authorize a longer run.",
     "verified_at": "2026-09-28T21:43:36-07:00"
   },
   "review": {
-    "status": "changes_requested",
-    "summary": "The independently approved 300-second procedure was consumed and failed its speed-ceiling acceptance gate. Its no-retry rule applies; a new offline plan is required before any vehicle command can be reviewed."
+    "status": "approved",
+    "summary": "Independent medium review approved exactly one 30-minute normal-driving procedure after checking the fixed six-signal capture-bound path, 1,800-second/9,000-attempt caps, serialized request rate, stop-on-error behavior, decoded-only storage, passenger operation, physical preflight, and private audit. No retry is approved."
   },
   "integration": {
     "status": "pending",
-    "summary": "The stationary result and reviewed 60-second procedure were committed locally at 16c3dd9, but remote publication was not authorized. The completed 60-second moving result and failed 300-second acceptance gate are reconciled in the current local documentation changes."
+    "summary": "The stationary, 60-second moving, and 300-second results are committed locally through a53ad9b, but remote publication was not authorized. The reviewed normal-driving acceptance decision and one-time 30-minute procedure are reconciled in current local changes."
   },
   "handoff": {
-    "summary": "The stationary and 60-second moving gates passed. The 300-second candidate completed without application error but failed its reviewed speed ceiling and cannot be retried. Stop vehicle testing; no 30-minute run is authorized."
+    "summary": "The stationary and 60-second moving gates passed. The 300-second application/recording result was clean but failed its former artificial 30 km/h procedure and cannot be retried. The user specified ordinary lawful driving as the intended condition, and exactly one 30-minute command is now independently approved under docs/safety.md."
   }
 }
 ---

@@ -44,6 +44,7 @@ from .client_dashboard import (DashboardLiveSource, DashboardSimSource,
                                SIMULATED_DTCS, reserve_dashboard_server,
                                wait_after_dtc_snapshot)
 from .drive_session import run_drive_session
+from .capture_harness import HarnessError, run_capture
 
 
 def demo_signals():
@@ -142,6 +143,16 @@ def main(argv=None):
     drive.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     drive.add_argument("--ui-host", default="127.0.0.1")
     drive.add_argument("--port", type=int, default=8765)
+    capture_harness = sub.add_parser("capture-harness", help="privately capture one bounded drive-session on Windows")
+    capture_harness.add_argument("--capture", required=True, help="existing private discovery capture")
+    capture_harness.add_argument("--output", required=True, help="fresh directory below captures/private")
+    capture_harness.add_argument("--confirm-private-raw-capture", action="store_true", required=True,
+                                 help="acknowledge that raw packet and host evidence stays private")
+    rehearsal = sub.add_parser("capture-rehearsal", help="offline Windows Packet Monitor loopback rehearsal")
+    rehearsal.add_argument("--output", required=True, help="fresh directory below captures/private")
+    rehearsal.add_argument("--duration", type=int, required=True, help="local rehearsal duration (1 to 2100 seconds)")
+    rehearsal.add_argument("--confirm-private-raw-capture", action="store_true", required=True,
+                           help="acknowledge that raw packet and host evidence stays private")
     disc = sub.add_parser("discover", help="bounded HSFZ UDP and DoIP discovery; sends no diagnostics")
     disc.add_argument("--interface", required=True, help="local IPv4 address to bind")
     disc.add_argument("--timeout", type=float, default=.6); disc.add_argument("--broadcast", default="169.254.255.255"); disc.add_argument("--json"); disc.add_argument("--redact-console", action="store_true", help="redact vehicle and network identifiers from console JSON")
@@ -198,6 +209,26 @@ def main(argv=None):
     exp = sub.add_parser("export", help="export recorded SQLite samples to CSV")
     exp.add_argument("database"); exp.add_argument("destination")
     args = parser.parse_args(argv)
+    if args.command in ("capture-harness", "capture-rehearsal"):
+        capture_arg = args.capture if args.command == "capture-harness" else None
+        rehearsal_seconds = args.duration if args.command == "capture-rehearsal" else None
+        if rehearsal_seconds is not None and not 1 <= rehearsal_seconds <= 2100:
+            parser.error("rehearsal duration must be between 1 and 2100 seconds")
+        try:
+            status, category = run_capture(
+                capture_arg, args.output,
+                confirm_private_raw_capture=args.confirm_private_raw_capture,
+                rehearsal_duration=rehearsal_seconds)
+        except HarnessError as exc:
+            category = str(exc)
+            status = 1
+        except Exception:
+            # Do not let exception text disclose private paths or system details.
+            category = "preflight-failed"
+            status = 1
+        print(json.dumps({"result": "complete" if status == 0 else "failed",
+                          "check": "private capture harness", "category": category}))
+        return status
     if args.command == "drive-session":
         if not 1 <= args.duration <= 1800:
             parser.error("duration must be between 1 and 1800 seconds")

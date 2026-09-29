@@ -182,6 +182,54 @@ independent review. Passing offline checks does not authorize the vehicle run;
 the Lead must record the reviewed one-time procedure and the user's final
 go/no-go decision.
 
+#### Laptop-only offline rehearsal handoff
+
+The native readiness evidence must be produced on the same laptop that would
+perform the eventual capture. Packet Monitor version and output, enabled ETW
+providers, USB/network drivers, intended interface hardware, CPU/timing
+overhead, storage throughput, and retention are host-specific. Desktop unit
+tests and desktop-native format probes validate portable logic only and cannot
+substitute for the laptop rehearsal.
+
+On the laptop, first pull the reviewed shared commit and read `docs/STATUS.md`
+and this section. Keep the vehicle physically disconnected. The intended
+interface hardware may be attached to the laptop only if it remains physically
+disconnected from the vehicle. Open an elevated PowerShell in the repository
+root, confirm no other Packet Monitor or diagnostic work is active, and run the
+short loopback-only smoke exactly as follows with a fresh timestamp:
+
+```powershell
+$captureStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+python -m supra_telemetry capture-rehearsal --output "captures/private/t009-15-laptop-smoke-$captureStamp" --duration 3 --confirm-private-raw-capture
+```
+
+The current native coverage parser intentionally fails closed until the
+laptop's private output establishes defensible native fields. Therefore an
+initial `coverage-unverified` result is expected and is not permission to
+continue. Inspect the private control, metadata, and statistics files locally;
+make only evidence-based parser changes; add sanitized fixtures and tests; and
+obtain independent review of the resulting exact parser and command. Do not
+copy raw output, host identifiers, addresses, or packets into tracked files.
+Any other failure, residual Packet Monitor session/filter, unexpected native
+layout, provider mismatch, loss, or cleanup problem stops the handoff for
+manual review without retry.
+
+Only after the laptop smoke, parser, cleanup, and independent review pass may
+the same elevated, vehicle-disconnected terminal run the 35-minute rehearsal:
+
+```powershell
+$captureStamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+python -m supra_telemetry capture-rehearsal --output "captures/private/t009-15-laptop-35min-$captureStamp" --duration 2100 --confirm-private-raw-capture
+```
+
+That command must exit zero with category `complete`, a finalized evidence
+bundle, all required artifacts, continuous provider/capture health, no loss or
+overwrite, coherent loopback packet coverage, verified cleanup, and acceptable
+timing/storage overhead. Independently review the private evidence by reporting
+only sanitized counts, relative timing, and pass/fail classifications. Until
+those laptop-only gates pass, the final decision is **no-go** and no vehicle or
+raw vehicle-capture run is authorized.
+
 The eventual exact command must use a new database inside the fresh ignored
 directory, for example `captures/private/t009-15-<private timestamp>/decoded.sqlite`;
 the consumed `moving-recording-30min.sqlite` path must not be reused. The harness

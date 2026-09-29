@@ -6,7 +6,7 @@ This repository uses Workflow 2.3.
 ## Workflow
 
 - The Lead owns intent, architecture, scope, safety, planning, operational tracker records, delegation, verification, and final acceptance.
-- Delegate meaningful bounded work to a GPT-6 Luna implementer with a concise execution contract. Luna returns evidence and never edits `docs/STATUS.md` or `docs/PROJECT_HISTORY.md`. After two evidence-based failed attempts at the same bounded issue, escalate to GPT-6 Sol Medium; escalate earlier for architecture or scope uncertainty.
+- Delegate meaningful bounded work to a GPT-5.6 Luna High implementer with a concise execution contract. Luna returns evidence and never edits `docs/STATUS.md` or `docs/PROJECT_HISTORY.md`. After two evidence-based failed attempts at the same bounded issue, escalate to GPT-6 Sol Medium; escalate earlier for architecture or scope uncertainty.
 - Use independent review when risk or uncertainty warrants it, or when requested. Ask the user about outcomes and consequential choices, not routine implementation details.
 - This workflow instruction change authorizes offline file work only; no vehicle execution or vehicle-facing commands of any kind are authorized. Active status remains offline-only.
 - See `docs/PROJECT_STATUS_CONTRACT.md` on demand for the Project Status Contract v1 schema and migration guidance; it need not be read for every trivial task.

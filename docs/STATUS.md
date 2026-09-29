@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "merge",
+  "workflow_stage": "handoff",
   "health": "healthy",
-  "updated_at": "2026-09-28T20:33:23-07:00",
+  "updated_at": "2026-09-28T20:36:16-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -25,7 +25,7 @@
     "task": {
       "id": "T009-9",
       "title": "Prepare a bounded moving-vehicle telemetry validation",
-      "status": "reviewed",
+      "status": "in_progress",
       "path": "docs/roadmap.md"
     }
   },
@@ -40,13 +40,13 @@
     ]
   },
   "next_action": {
-    "summary": "Choose how to integrate the reviewed drive-session changes. After the exact build and procedure are synchronized, the Lead may activate the single 60-second stationary recording gate; no moving command is authorized.",
+    "summary": "Run the exact one-time 60-second stationary recording gate while parked, then return only its privacy-safe final JSON so the Lead can inspect the local SQLite gate before any moving procedure is considered.",
     "owner": "user",
     "reference": "docs/safety.md"
   },
   "attention": [
-    "No vehicle command is currently authorized.",
-    "The reviewed implementation and stationary procedure are not yet synchronized.",
+    "Only the exact one-time 60-second stationary recording command in docs/safety.md is authorized.",
+    "No moving command, retry, or longer run is authorized.",
     "A clean 60-second stationary recording gate and its private post-run database review are required before any moving procedure can be considered."
   ],
   "architecture": {
@@ -56,19 +56,19 @@
   },
   "verification": {
     "status": "passed",
-    "summary": "All 134 offline Python tests passed, including the blocked-request and normal-timer shutdown regressions. The production frontend build and repaired installable-wheel inspection passed, and git diff validation was clean. No vehicle traffic was sent.",
-    "verified_at": "2026-09-28T20:33:23-07:00"
+    "summary": "All 134 offline Python tests passed again on merged local main, including the blocked-request and normal-timer shutdown regressions. The production frontend build, repaired installable-wheel inspection, and git diff validation passed. No vehicle traffic was sent.",
+    "verified_at": "2026-09-28T20:36:16-07:00"
   },
   "review": {
     "status": "approved",
     "summary": "Independent medium re-review approved the offline implementation and proposed separately gated 60-second stationary procedure after verifying bounded shutdown, intentional-stop handling, decoded-recording privacy, and the private post-run database checks."
   },
   "integration": {
-    "status": "unmerged",
-    "summary": "T009-9 changes are reviewed and verified on local branch codex/offline-drive-session but are not yet committed or synchronized."
+    "status": "merged",
+    "summary": "The reviewed drive-session implementation was fast-forwarded to local main at commit fdb02f4. Main is one commit ahead of origin/main because the user selected local merge rather than push."
   },
   "handoff": {
-    "summary": "T009-9 offline implementation and the proposed stationary gate are verified and independently approved. Integration and synchronization are next; no vehicle command is authorized until they complete."
+    "summary": "The offline implementation is verified, independently approved, and locally merged. One exact 60-second stationary recording gate is authorized; no moving command is authorized until its private database review passes and a new moving procedure is reviewed."
   }
 }
 ---

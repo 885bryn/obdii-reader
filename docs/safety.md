@@ -39,17 +39,20 @@ authorized stationary normal-mode run has now completed with exit code 0. The
 operator reported no vehicle warning; the application reported no acquisition
 error, and no retry or second command occurred. The dashboard did not persist an
 end-of-run rate summary, so this result does not prove the achieved display rate.
-**No vehicle command is currently authorized.**
+**One vehicle command is currently authorized: the exact 60-second stationary
+recording gate below, once, on the locally merged `main` build containing
+implementation commit `fdb02f4`. No moving command is authorized.**
 
-## Pending decoded-recording gate
+## Authorized one-time decoded-recording gate
 
-The next candidate vehicle action is one 60-second stationary validation of the
-new decoded-only recording path. It is not authorized until the exact
-implementation and procedure pass independent review and are synchronized. A
-clean result will establish only that one stationary session; it will not
-authorize driving, a retry, or a longer duration.
+The exact implementation and procedure passed independent medium review, all
+134 offline Python tests, the production frontend build, and installable-wheel
+inspection, and were merged to local `main`. This authorizes one 60-second
+stationary validation of the new decoded-only recording path. A clean result
+will establish only that one stationary session; it will not authorize driving,
+a retry, or a longer duration.
 
-The proposed one-time procedure is:
+The authorized one-time procedure is:
 
 1. Park outdoors, apply the parking brake, select Park, chock the wheels, and
    keep a second person available. Start the engine normally with PAD/Diagnostic
@@ -58,9 +61,10 @@ The proposed one-time procedure is:
    the diagnostic connection. Use only the existing private capture and its
    verified source-bound route. Do not rediscover, scan, substitute an address,
    or run another vehicle command in the same session.
-3. Confirm the adapter has one expected IPv4 link-local address, the exact
-   synchronized build and full offline suite passed, independent review approved
-   this procedure, and the chosen SQLite path does not already exist. Do not
+3. Confirm the adapter has one expected IPv4 link-local address, checked-out
+   `main` contains implementation commit `fdb02f4`, the full 134-test offline
+   suite passed, independent review approved this procedure, and the chosen
+   SQLite path does not already exist. Do not
    begin if the adapter, capture, vehicle state, battery condition, build, or
    procedure status is uncertain.
 4. Run the exact reviewed command once. Open the printed `127.0.0.1` URL in a
@@ -68,7 +72,7 @@ The proposed one-time procedure is:
    shows `RECORDING`, fresh live values, zero speed, and plausible idle data while
    the vehicle remains parked.
 
-The proposed command is:
+The authorized command is:
 
 ```powershell
 python -m supra_telemetry drive-session --capture captures/discovery.json --db stationary-recording-60s.sqlite --duration 60 --confirm-hands-off

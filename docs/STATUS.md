@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "implementation",
   "health": "attention",
-  "updated_at": "2026-09-29T10:52:56-07:00",
+  "updated_at": "2026-09-29T10:56:19-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -72,8 +72,8 @@
     "summary": "Independent medium re-review approved the final desktop implementation and exact laptop handoff for offline continuation after repairs to runtime health bounds, hard-stop budgeting, stop verification, database integrity, artifact gates, native filter parsing, and active-status proof. This approval does not cover the laptop-native coverage parser, 35-minute rehearsal, final vehicle command, or vehicle execution."
   },
   "integration": {
-    "status": "unmerged",
-    "summary": "The reviewed desktop capture-harness implementation, tests, laptop-only procedure, and operational status are ready for commit and push to origin/main. All raw captures, host evidence, private databases, and helper scripts remain ignored and outside Git/GitHub."
+    "status": "synchronized",
+    "summary": "The reviewed desktop capture-harness implementation, tests, laptop-only procedure, and operational status are committed at 9d54abc and synchronized to origin/main. All raw captures, host evidence, private databases, and helper scripts remain ignored and outside Git/GitHub."
   },
   "handoff": {
     "summary": "T009-15 remains in progress and is now at a laptop-only boundary. Pull the synchronized commit on the actual capture laptop; with the vehicle physically disconnected, run the exact three-second elevated smoke in docs/safety.md. Repair and independently review only evidence-based laptop parser differences, then run and audit the exact 2,100-second rehearsal. The current final decision is no-go; no vehicle or raw vehicle-capture run is authorized."

@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "handoff",
+  "workflow_stage": "idle",
   "health": "healthy",
-  "updated_at": "2026-09-28T18:00:48-07:00",
+  "updated_at": "2026-09-28T20:01:34-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -25,7 +25,7 @@
     "task": {
       "id": "T009-8",
       "title": "Redesign the client dashboard interface",
-      "status": "reviewed",
+      "status": "closed",
       "path": "docs/roadmap.md"
     }
   },
@@ -39,9 +39,9 @@
     ]
   },
   "next_action": {
-    "summary": "Review the running simulated dashboard on the laptop and report any desired visual adjustments; after acceptance, commit and synchronize the reviewed implementation.",
-    "owner": "user",
-    "reference": "README.md"
+    "summary": "Add a privacy-safe end-of-run cadence summary offline before proposing any further vehicle dashboard run. No vehicle command is currently authorized.",
+    "owner": "lead",
+    "reference": "docs/safety.md"
   },
   "attention": [
     "No vehicle command is currently authorized.",
@@ -62,11 +62,11 @@
     "summary": "Independent light review approved the repaired dashboard after verifying fault-description behavior, temperature prominence, asset-serving boundaries, notice packaging, and correct warning/error sample states."
   },
   "integration": {
-    "status": "unmerged",
-    "summary": "The reviewed dashboard redesign remains uncommitted in the current working tree pending user visual acceptance."
+    "status": "synchronized",
+    "summary": "The reviewed dashboard redesign is synchronized to origin/main in commit 0d852f8."
   },
   "handoff": {
-    "summary": "The reviewed laptop dashboard is running in simulated mode for user inspection. It uses no vehicle connection. Report any visual changes before the implementation is committed and synchronized."
+    "summary": "The reviewed laptop dashboard redesign is synchronized to origin/main in commit 0d852f8. No vehicle command is currently authorized; the next work is an offline cadence-summary improvement."
   }
 }
 ---

@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "handoff",
   "health": "healthy",
-  "updated_at": "2026-09-28T20:36:16-07:00",
+  "updated_at": "2026-09-28T20:40:47-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -40,7 +40,7 @@
     ]
   },
   "next_action": {
-    "summary": "Run the exact one-time 60-second stationary recording gate while parked, then return only its privacy-safe final JSON so the Lead can inspect the local SQLite gate before any moving procedure is considered.",
+    "summary": "On the other computer, pull origin/main and verify it contains implementation commit fdb02f4 and authorization commit b15c491. Then run the exact one-time 60-second stationary recording gate while parked and return only its privacy-safe final JSON so the Lead can inspect the local SQLite gate before any moving procedure is considered.",
     "owner": "user",
     "reference": "docs/safety.md"
   },
@@ -64,11 +64,11 @@
     "summary": "Independent medium re-review approved the offline implementation and proposed separately gated 60-second stationary procedure after verifying bounded shutdown, intentional-stop handling, decoded-recording privacy, and the private post-run database checks."
   },
   "integration": {
-    "status": "merged",
-    "summary": "The reviewed drive-session implementation was fast-forwarded to local main at commit fdb02f4. Main is one commit ahead of origin/main because the user selected local merge rather than push."
+    "status": "synchronized",
+    "summary": "The reviewed drive-session implementation at fdb02f4 and its authorization record at b15c491 are pushed to origin/main for use on the other computer."
   },
   "handoff": {
-    "summary": "The offline implementation is verified, independently approved, and locally merged. One exact 60-second stationary recording gate is authorized; no moving command is authorized until its private database review passes and a new moving procedure is reviewed."
+    "summary": "The offline implementation is verified, independently approved, merged, and synchronized to origin/main. The other computer must pull and verify the authorized commits before running the one exact 60-second stationary recording gate. No moving command is authorized until its private database review passes and a new moving procedure is reviewed."
   }
 }
 ---

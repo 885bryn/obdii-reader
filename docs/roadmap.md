@@ -14,7 +14,7 @@ Reproduce the useful diagnostic and monitoring capabilities of BimmerLink for th
 
 ### Recorded backlog
 
-- Investigate the consumed 30-minute candidate's vehicle-speed timeout offline. Any proposed retry with a narrowly filtered private raw capture requires a new bounded procedure and independent review before vehicle use.
+- Prepare the capture-enhanced repeat of the consumed 30-minute candidate: implement and offline-test a bounded passive Packet Monitor/ETW harness, keep the six-signal vehicle traffic unchanged, complete independent review, and obtain a final one-time go/no-go decision before vehicle use. Raw captures and host evidence remain private and Git-ignored.
 - Extend the dashboard with user-selectable layouts and useful session minimum/maximum presentation.
 - Add live data from additional control units only after their routes, identifiers, formulas, and limits are established on this vehicle.
 - Investigate read-only ZF 8HP adaptation values only if the vehicle has the applicable transmission and authoritative or empirical evidence establishes the exact route and decoding.

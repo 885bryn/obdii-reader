@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "planning",
+  "workflow_stage": "implementation",
   "health": "attention",
-  "updated_at": "2026-09-29T01:17:42-07:00",
+  "updated_at": "2026-09-29T02:04:33-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -23,22 +23,22 @@
       "path": "docs/roadmap.md"
     },
     "task": {
-      "id": "T009-14",
-      "title": "Investigate the interrupted 30-minute drive session",
-      "status": "complete",
+      "id": "T009-15",
+      "title": "Prepare a capture-enhanced 30-minute repeat",
+      "status": "in_progress",
       "path": "docs/roadmap.md"
     }
   },
   "latest_accomplishment": {
-    "summary": "A read-only investigation on the original recording laptop reconfirmed the private database's integral, finalized 568.64-second session and terminal vehicle-speed timeout, then inspected source-host Windows logs around the failure. No USB reset or removal, Ethernet link change, driver or Plug-and-Play failure, TCP/IP failure, power event, application crash, or hardware error was recorded within 120 seconds before or after the timeout. One DHCP address-assignment failure occurred about 557 seconds earlier and did not report link, USB, or driver failure; acquisition continued successfully afterward. The result is classified as no relevant host event found, not proof that no transient occurred, because several detailed NDIS, TCP/IP, Driver Frameworks, and USB diagnostic channels were disabled.",
-    "at": "2026-09-29T01:17:42-07:00",
+    "summary": "A bounded plan for a capture-enhanced repeat of the 30-minute candidate was independently reviewed and approved for offline harness implementation. The proposed run keeps the existing six-signal vehicle traffic, route, cadence, two-second deadline, and fail-closed behavior unchanged while adding a private, bounded Packet Monitor and ETW evidence bundle. The approval covers offline implementation only and does not authorize a vehicle command or raw-capture run.",
+    "at": "2026-09-29T02:00:19-07:00",
     "evidence": [
-      "docs/research.md",
-      "docs/safety.md"
+      "docs/safety.md",
+      "docs/roadmap.md"
     ]
   },
   "next_action": {
-    "summary": "Select the next offline-only roadmap task. Keep the private database local and preserve the no-retry boundary; no vehicle command or raw-capture run is authorized. Any future vehicle procedure would require a new user decision, explicit bounds, and independent review.",
+    "summary": "Implement the bounded passive-capture harness without changing vehicle-facing traffic, add the specified offline fault-injection coverage, complete a 35-minute offline rehearsal, and independently review the harness, artifacts, exact command, and evidence gates. Only then may the user make a final one-time vehicle go/no-go decision.",
     "owner": "lead",
     "reference": "docs/safety.md"
   },
@@ -49,6 +49,8 @@
     "The one-time 30-minute normal-driving authorization was consumed and stopped on a vehicle-speed timeout after 568.64 seconds; do not repeat it.",
     "No vehicle command or raw-capture run is currently authorized.",
     "The source-host log audit found no relevant recorded event near the timeout, but disabled low-level channels prevent treating that absence as proof that no transient occurred.",
+    "The capture-enhanced repeat is a reviewed draft for offline harness implementation only; it does not authorize a vehicle command or raw-capture run.",
+    "Any ETL, PCAPNG, database, event export, console log, manifest, or analysis working file from the proposed procedure is private and must remain in a Git-ignored directory.",
     "The private moving-recording-30min.sqlite file is present in this repository root, remains Git-ignored, and must stay outside Git/GitHub."
   ],
   "architecture": {
@@ -58,19 +60,19 @@
   },
   "verification": {
     "status": "partial",
-    "summary": "SQLite integrity, foreign-key, finalization, chronology, privacy, and empty-raw-exchange checks pass, and the single vehicle-speed timeout is terminal. On the original recording laptop, covered System, Application, Device Setup Manager, Kernel-PnP, Network Profile, and DHCP logs contained no relevant event within the relative 120-second window. Disabled detailed transport channels limit the negative result, and the underlying timeout cause remains unverified.",
-    "verified_at": "2026-09-29T01:17:42-07:00"
+    "summary": "The documentation plan passed diff checks and independent safety review for offline implementation. The capture harness, fault-injection tests, 35-minute rehearsal, retention and coverage gates, artifact finalization, and exact invocation do not exist yet and remain unverified. The original timeout cause remains unknown.",
+    "verified_at": "2026-09-29T02:00:19-07:00"
   },
   "review": {
-    "status": "not_started",
-    "summary": "The offline host audit changed no code, settings, devices, or vehicle procedure, so no implementation review was required. No new vehicle procedure exists to review; any future run or capture remains unauthorized until separately specified and independently reviewed."
+    "status": "approved",
+    "summary": "Independent medium review approved the documentation draft for offline harness implementation after retention, filter ownership, provider coverage, privacy, fresh-path, and observation-limit repairs. This approval does not cover unimplemented code, an exact vehicle command, or vehicle execution."
   },
   "integration": {
     "status": "synchronized",
-    "summary": "The redacted database and source-host log findings are committed and synchronized to origin/main. The private SQLite database remains ignored and outside Git/GitHub."
+    "summary": "The reviewed capture-enhanced repeat plan and operational status are committed and synchronized to origin/main. Existing private data remains ignored and outside Git/GitHub."
   },
   "handoff": {
-    "summary": "T009-14 is complete. The one-time 30-minute candidate stopped fail-closed after 568.64 seconds on a vehicle-speed timeout, and the original laptop's available Windows logs recorded no relevant host event within 120 seconds of it. Disabled detailed transport channels mean the underlying ECU, response, link, adapter, cable, or network cause remains unknown. The private database stays local and ignored; no retry, vehicle command, or raw capture is authorized."
+    "summary": "T009-15 is in progress. The reviewed draft preserves identical six-signal vehicle traffic and proposes bounded private Packet Monitor/ETW evidence, but only offline harness implementation is approved. Build and rehearse the harness, independently review it and the exact command, and obtain the user's final one-time go/no-go before any vehicle use."
   }
 }
 ---

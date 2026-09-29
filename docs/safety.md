@@ -75,6 +75,149 @@ because acquisition halt shuts down the loopback server.
 **No vehicle command or raw-capture run is currently authorized. Do not repeat
 the consumed 30-minute command.**
 
+### Proposed capture-enhanced 30-minute repeat (draft; not authorized)
+
+The user selected a second normal-driving candidate to investigate whether the
+terminal timeout recurs and, if it does, what the host and transport observed.
+"Capture all possible datapoints" means complete diagnostic evidence around the
+same six-signal read-only session. It does **not** authorize discovery, scanning,
+additional PIDs or ECUs, a different route or target, writes, controls, session
+changes, retries, reconnects, or any other vehicle request.
+
+The vehicle-facing behavior must remain identical to the consumed candidate:
+the unchanged `drive-session` implementation from commit `fdb02f4`, the existing
+verified capture-bound route, the same fixed six Mode 01 PIDs and scheduler, a
+two-second response deadline, a maximum of five request starts per second, an
+1,800-second ceiling, a 9,000-attempt ceiling, and stop on the first application
+error. No application-level raw persistence will be added before this run,
+because modifying the transport path would make the reproduction less direct.
+
+The added evidence is passive and private:
+
+1. The normal decoded-only SQLite database and privacy-safe command output.
+2. A full-packet Windows Packet Monitor ETL filtered to TCP port 6801, captured
+   at all Packet Monitor components with untruncated packets, all packet types,
+   and packet/component/drop metadata. Preserve the original ETL as the
+   authoritative artifact and derive separate normal and drop-only PCAPNG copies
+   only for convenient packet inspection. PCAPNG conversion does not replace the
+   ETL or its component/drop evidence.
+3. ETW events collected in the same bounded trace from exactly these locally
+   verified providers: `Microsoft-Windows-NDIS`, `Microsoft-Windows-TCPIP`,
+   `Microsoft-Windows-DriverFrameworks-UserMode`,
+   `Microsoft-Windows-Kernel-PnP`, `Microsoft-Windows-USB-USBHUB3`,
+   `Microsoft-Windows-USB-USBXHCI`, `Microsoft-Windows-Dhcp-Client`,
+   `Microsoft-Windows-NetworkProfile`, and
+   `Microsoft-Windows-Wired-AutoConfig`. The harness will use all keywords and
+   verbose level 5 for each provider only if the offline rehearsal demonstrates
+   bounded volume and acceptable overhead; otherwise the provider set or level
+   must be reduced and independently re-reviewed before vehicle use. Collect
+   providers directly into the private trace rather than permanently enabling
+   dormant event-log channels.
+4. Privacy-sensitive pre/post host metadata sufficient to correlate adapter,
+   driver, link, process, wall-clock, and monotonic timing, plus the relevant
+   existing Windows event-log window. The TCP-port packet filter minimizes raw
+   packet scope, but provider events may still include unrelated private host or
+   device activity; treat the entire bundle as private rather than claiming that
+   unrelated activity is absent.
+5. A private manifest containing file sizes, SHA-256 hashes, tool/runtime
+   versions, capture start/stop times, application start/stop times, exit status,
+   and whether each expected artifact finalized successfully.
+
+All ETL, PCAPNG, database, event exports, console logs, metadata, and analysis
+working files must live under a fresh Git-ignored private capture directory.
+They may contain MAC, IP/interface, device, route, timing, raw frame, or other
+private values. Never add them to Git, paste them into tracked documentation, or
+include their raw contents in a public report. Tracked results are limited to
+redacted classifications, counts, relative timing, and pass/fail outcomes.
+
+Before any vehicle use, implement and offline-test a bounded capture harness
+that performs these steps without altering the application command or vehicle
+traffic:
+
+- require administrative capture capability, a fresh private output directory,
+  no existing Packet Monitor session, no existing Packet Monitor filters, and
+  at least 10 GiB of free space;
+- add one harness-owned TCP-port-6801 filter, then start full-packet and provider
+  tracing before the application with `--comp all`, `--type all`,
+  `--pkt-size 0`, packet flags `0x03F`, a 4,096 MiB file limit, and circular log
+  mode. On this host, `pktmon start help` defines `0x03F` as the combination of
+  internal errors, summaries, source/destination information, selected NDIS
+  metadata, raw packets, and component-registration changes (`0x001` through
+  `0x020`). Record the Packet Monitor version and help-derived flag map privately,
+  and reject the preflight if this binary does not accept or report that exact
+  configuration. Prove that both the owned filter and trace are active before
+  starting the unchanged `drive-session` command once. The 4 GiB limit bounds
+  disk use; the post-run coverage gate below detects and rejects overwrite of
+  any part of the application interval;
+- stop and finalize tracing in a `finally` path after application exit, operator
+  interruption, or a hard harness deadline no later than 60 seconds after the
+  1,800-second application ceiling;
+- never restart Packet Monitor, the application, or the diagnostic connection
+  within the procedure; a capture failure invalidates the evidence and requires
+  stopping the diagnostic run at the next safe opportunity;
+- remove the harness-owned filter during cleanup only after proving no prior
+  filters existed. Failure to restore the initial stopped/session-free and
+  filter-free state is a harness failure that must be reported for manual
+  recovery, never hidden by another run;
+- preserve command output and artifact hashes without printing private adapter,
+  route, packet, database, or event contents.
+
+The harness must pass offline fault-injection checks for clean completion,
+application timeout, peer close, partial frame, capture-start failure,
+capture-stop failure, pre-existing filters, circular overwrite, trace loss,
+operator interruption, and hard-deadline cleanup. An offline HSFZ-shaped TCP
+exchange on port 6801 must prove that the exact owned filter passes the intended
+flow. A rehearsal lasting at least 35 minutes must prove that full packets,
+component/drop capability, start-to-stop time coverage, and finalized artifacts
+fit comfortably within the 4 GiB bound without lost events or unacceptable
+timing/CPU overhead. Trace metadata and decoding must prove that every selected
+provider was registered and enabled for the full interval; a provider may
+legitimately emit zero events during a healthy rehearsal. Likewise, zero packet
+drops is expected and does not fail the capability gate. Exercise controlled
+offline network/provider events where safe, but never create a USB, driver, or
+device fault merely to force an event. The capture stack itself may perturb host
+timing, so any later comparison must state that limitation. The exact harness,
+exact command, artifact handling, stop conditions, and post-run audit require
+independent review. Passing offline checks does not authorize the vehicle run;
+the Lead must record the reviewed one-time procedure and the user's final
+go/no-go decision.
+
+The eventual exact command must use a new database inside the fresh ignored
+directory, for example `captures/private/t009-15-<private timestamp>/decoded.sqlite`;
+the consumed `moving-recording-30min.sqlite` path must not be reused. The harness
+must record the exact command privately and verify before start that both the
+directory and database path are unused.
+
+If eventually authorized, the operating conditions remain those of the prior
+normal-driving candidate: two people; driver handles only the vehicle; passenger
+handles only the secured laptop; normal engine operation with PAD/Diagnostic
+Mode off; begin parked; no test-specific speed target or maneuver; obey all laws
+and conditions; and stop at the next safe opportunity for any vehicle warning,
+unsafe condition, stale display, application/capture/recording error, timeout,
+transport or decoder error, implausible value, or equipment problem. There is no
+retry regardless of whether the run completes or fails.
+
+The private post-run audit must first validate database and artifact integrity,
+then prove that the ETL began before the application, ended after it, did not
+overwrite any part of the application interval, reported no lost/internal
+capture events, contains registered subscriptions for the expected providers,
+and has coherent packet/component coverage for the diagnostic flow. The
+overwrite decision must use ETL buffer, sequence, loss, and coverage metadata;
+file size and first/last timestamps alone are insufficient. If any
+coverage gate fails, packet absence is uninterpretable and the result is limited
+to application-level evidence; there is still no retry. With valid coverage, the
+audit must correlate the final request with packet and host evidence and classify,
+without publishing raw values, whether the Windows stack observed the request;
+whether TCP acknowledged it; whether no, partial, control-only, complete, or
+late HSFZ data arrived; and whether FIN, RST, retransmission, Packet Monitor
+drop, link, driver, USB, PnP, power, or timing-anomaly evidence was present. The
+ETL can locate evidence within the observed Windows stack but cannot prove what
+happened beyond its observation points in the cable, adapter firmware, gateway,
+or ECU. PCAPNG alone cannot support a packet-drop conclusion. Compare any failure
+with the prior vehicle-speed timeout in signal, elapsed time, and transport shape.
+A clean 30-minute run would show non-recurrence once, not prove the earlier event
+fixed or establish indefinite reliability.
+
 ### Completed one-time 60-second low-speed moving gate (historical)
 
 1. In daylight and dry weather, preselect a legal, quiet local route with a safe

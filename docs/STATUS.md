@@ -7,9 +7,9 @@
     "goal": "Build a reliable, extensible, strictly read-only telemetry platform for a 2023 Toyota GR Supra over wired ENET"
   },
   "project_state": "active",
-  "workflow_stage": "handoff",
-  "health": "healthy",
-  "updated_at": "2026-09-28T21:12:00-07:00",
+  "workflow_stage": "verification",
+  "health": "attention",
+  "updated_at": "2026-09-28T21:43:36-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -30,8 +30,8 @@
     }
   },
   "latest_accomplishment": {
-    "summary": "The one authorized 60-second stationary drive-session recording gate completed with exit code 0 and 288 requests. Its private local SQLite review passed every required gate: finalized session, exactly zero vehicle speed, coherent samples for all six signals, no recorded errors, privacy-safe signal definitions, and no raw exchanges. This establishes only that stationary session and does not authorize moving use or a longer run.",
-    "at": "2026-09-28T21:01:12-07:00",
+    "summary": "The one authorized 300-second moving command completed at the application level with exit code 0 and 1,443 requests, but its private audit failed the reviewed speed ceiling because at least one sample exceeded 30 km/h. All other summary, error, chronology, privacy, and raw-exchange gates passed. The no-retry rule ended the candidate; no 30-minute run is authorized.",
+    "at": "2026-09-28T21:43:36-07:00",
     "evidence": [
       "docs/research.md",
       "docs/safety.md",
@@ -39,14 +39,16 @@
     ]
   },
   "next_action": {
-    "summary": "Run only the independently approved one-time 60-second, at-or-below-30-km/h moving procedure with a dedicated passenger operator, secured cable/equipment, stop/no-retry rules, and a fresh database. Then park and perform its private post-run review before any further vehicle command.",
-    "owner": "user",
+    "summary": "Stop vehicle testing and reassess the moving-validation design offline. Do not retry the 300-second command or start the 30-minute run.",
+    "owner": "lead",
     "reference": "docs/safety.md"
   },
   "attention": [
     "The one-time stationary recording authorization has been consumed and passed; do not repeat it.",
-    "Only the exact one-time 60-second low-speed moving command in docs/safety.md is authorized.",
-    "A 30-minute run remains blocked pending successful 60-second and separately reviewed 300-second moving stages, longer-session power/session guidance, and separate review of an exact 1,800-second procedure."
+    "The one-time 60-second moving authorization has been consumed and passed; do not repeat it.",
+    "The one-time 300-second authorization was consumed and failed its speed-ceiling audit; do not repeat it.",
+    "No vehicle command is currently authorized.",
+    "A 30-minute run is blocked."
   ],
   "architecture": {
     "status": "aligned",
@@ -54,20 +56,20 @@
     "reference": "docs/architecture.md"
   },
   "verification": {
-    "status": "passed",
-    "summary": "All 134 offline Python tests passed immediately before the vehicle gate. The exact 60-second stationary command then completed with exit code 0, and the private SQLite review passed every required recording, speed, error, metadata, and raw-exchange gate.",
-    "verified_at": "2026-09-28T21:01:12-07:00"
+    "status": "failed",
+    "summary": "The 300-second command exited 0 and its recording/privacy checks passed, but private read-only inspection found that at least one vehicle-speed sample exceeded the reviewed 30 km/h ceiling. The procedural gate therefore failed.",
+    "verified_at": "2026-09-28T21:43:36-07:00"
   },
   "review": {
-    "status": "approved",
-    "summary": "Independent medium re-review approved the exact one-time 60-second low-speed moving procedure after verifying the driver/passenger separation, at-or-below-30-km/h bound, secured cable/equipment gate, exact command, stop/no-retry process, and private database acceptance checks. This approval does not extend to 300 seconds or 30 minutes."
+    "status": "changes_requested",
+    "summary": "The independently approved 300-second procedure was consumed and failed its speed-ceiling acceptance gate. Its no-retry rule applies; a new offline plan is required before any vehicle command can be reviewed."
   },
   "integration": {
     "status": "pending",
-    "summary": "The verified stationary result and proposed next-stage procedure are being reconciled locally and have not yet been committed or pushed."
+    "summary": "The stationary result and reviewed 60-second procedure were committed locally at 16c3dd9, but remote publication was not authorized. The completed 60-second moving result and failed 300-second acceptance gate are reconciled in the current local documentation changes."
   },
   "handoff": {
-    "summary": "The stationary gate and its private database review passed. One exact 60-second low-speed moving gate is now independently approved for a single run under docs/safety.md; no retry or longer moving run is authorized. The 30-minute run remains blocked by the required 300-second stage and longer-session guidance."
+    "summary": "The stationary and 60-second moving gates passed. The 300-second candidate completed without application error but failed its reviewed speed ceiling and cannot be retried. Stop vehicle testing; no 30-minute run is authorized."
   }
 }
 ---

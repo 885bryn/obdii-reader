@@ -9,7 +9,7 @@
   "project_state": "active",
   "workflow_stage": "implementation",
   "health": "attention",
-  "updated_at": "2026-09-29T16:28:28-07:00",
+  "updated_at": "2026-09-29T17:50:22-07:00",
   "current": {
     "feature": {
       "id": "F001",
@@ -30,13 +30,12 @@
     }
   },
   "latest_accomplishment": {
-    "summary": "A separate stakeholder-dashboard MVP now serves the six existing read-only Mode 01 values over loopback until manual stop, accepts the standard decoded speed and RPM domains without an artificial speed gate, and performs no DTC snapshot, SQLite recording, export, raw logging, retry, reconnect, discovery, or vehicle-control action. Listener reservation precedes source construction, request starts remain serialized and capped at five per second, the first acquisition error stops the source, the browser clears stale values after API loss, and the CLI reports only fixed failure categories. All 167 portable offline tests and the production frontend build pass, and independent medium re-review approved the repaired implementation. No vehicle traffic was sent and no vehicle run is authorized.",
-    "at": "2026-09-29T16:28:28-07:00",
+    "summary": "The stakeholder dashboard now has an immediate local-only simulated mode and a fail-closed live startup preflight. Simulated mode presents six values until Ctrl+C with no capture, network source, DTC read, storage, or logging. Live remains capture-bound: it reserves loopback first, bind-checks the exact captured interface without sending packets, and passes the same immutable, address-hidden route snapshot into the existing fixed six-PID source without rereading or substituting the capture. All 172 portable offline tests pass; GPT-5.6 Sol Medium independently approved the final diff with no actionable findings. A brief exact-command validation unexpectedly passed preflight and was stopped manually; it may have sent only the existing read-only PID requests, persisted nothing, and produced no accepted empirical value evidence. No further vehicle retry is authorized.",
+    "at": "2026-09-29T17:50:22-07:00",
     "evidence": [
       "supra_telemetry/client_dashboard.py",
       "supra_telemetry/__main__.py",
       "tests/test_client_dashboard.py",
-      "frontend/src/dashboard.tsx",
       "docs/safety.md",
       "README.md"
     ]
@@ -53,6 +52,7 @@
     "The one-time 30-minute normal-driving authorization was consumed and stopped on a vehicle-speed timeout after 568.64 seconds; do not repeat it.",
     "No vehicle command or raw-capture run is currently authorized.",
     "The stakeholder dashboard is approved and verified offline only; its command and confirmation flag do not authorize connection to or execution against the vehicle.",
+    "One brief exact-command validation unexpectedly passed the local preflight and was manually stopped; it may have sent only the existing read-only PID requests, logged nothing, and does not authorize a retry or establish plausible live values.",
     "The source-host log audit found no relevant recorded event near the timeout, but disabled low-level channels prevent treating that absence as proof that no transient occurred.",
     "The capture harness is approved only for offline continuation on the actual capture laptop; it does not authorize a vehicle command or raw vehicle-capture run.",
     "Desktop-native probes cannot establish laptop Packet Monitor compatibility, driver/provider behavior, timing, storage, retention, or coverage.",
@@ -62,21 +62,21 @@
   ],
   "architecture": {
     "status": "aligned",
-    "summary": "The compiled React frontend remains loopback-only with the privacy-safe /api/state contract as its sole browser data source. The new stakeholder command reuses only the existing capture-bound moving six-PID source and fixed scheduler, adds no persistence or DTC acquisition, and permits unbounded manual duration only on that moving source while all existing stationary and finite commands retain their limits. The installed Python runtime remains standard-library-only.",
+    "summary": "The compiled React frontend remains loopback-only with the privacy-safe /api/state contract as its sole browser data source. Stakeholder simulated mode is local-only and unbounded until manual stop. Live startup reserves loopback, validates the exact capture once, bind-checks that source locally without packets, and reuses the same immutable hidden route snapshot for the fixed six-PID source. It adds no persistence or DTC acquisition and does not alter existing finite commands. The installed Python runtime remains standard-library-only.",
     "reference": "docs/architecture.md"
   },
   "verification": {
     "status": "partial",
-    "summary": "All 167 portable offline tests pass. New coverage verifies standard decoded moving speed/RPM values without an artificial speed gate, the exact fixed route/PID schedule and rolling request-start limit, no DTC or recording path, loopback reservation order, indefinite manual lifecycle only for the moving source, stationary-source duration preservation, fixed redacted halt reporting, stale-value clearing, and packaged asset serving. Frontend type checking and the Vite production build pass, CLI help is correct, and staged diff checks pass. No real capture was opened and no vehicle traffic was sent. The actual laptop capture smoke, native coverage parser, 35-minute retention and overhead, and final evidence audit remain unverified; the original vehicle timeout cause remains unknown.",
-    "verified_at": "2026-09-29T16:28:28-07:00"
+    "summary": "All 172 portable offline tests pass. New coverage verifies simulated mode has no capture, vehicle source, DTC, store, or log; live reserves loopback first; preflight performs bind/close only on the exact captured interface; failure prevents source construction; and the validated immutable route snapshot is reused without a second capture read or substitution. Python compilation, CLI help, diff checks, and direct simulated HTTP/API inspection pass. The laptop capture smoke, native coverage parser, 35-minute retention and overhead, and final evidence audit remain unverified; the original vehicle timeout cause remains unknown.",
+    "verified_at": "2026-09-29T17:50:22-07:00"
   },
   "review": {
     "status": "approved",
-    "summary": "Independent medium review found and then approved the repair for the stakeholder dashboard's terminal-error transition: browser API loss now clears stale samples and the CLI reports only allowlisted fixed reasons. Re-review also confirmed that indefinite duration is restricted to the moving source, existing commands remain bounded, the new packaged asset is present, and the MVP adds no DTC, persistence, retry, reconnect, or vehicle-control path. Approval is offline-only and does not cover vehicle execution."
+    "summary": "GPT-5.6 Sol Medium independently approved the final recovery diff with no actionable findings after verifying simulated/live CLI behavior, zero-I/O simulated mode, bind-only preflight, immutable route snapshot reuse without reread or substitution, lifecycle, compatibility, privacy, tests, and documentation. Approval remains offline-only and does not cover vehicle execution."
   },
   "integration": {
     "status": "synchronized",
-    "summary": "The reviewed stakeholder dashboard MVP, rebuilt frontend assets, tests, documentation, and operational records are committed and synchronized to origin/main. All raw captures, host evidence, private databases, and helper scripts remain ignored and outside Git/GitHub."
+    "summary": "The reviewed stakeholder demo recovery, live preflight hardening, tests, documentation, and operational records are committed and synchronized to origin/main. All raw captures, host evidence, private databases, and helper scripts remain ignored and outside Git/GitHub."
   },
   "handoff": {
     "summary": "The stakeholder dashboard MVP is complete and independently approved offline, but it has not run against the vehicle and provides no vehicle authorization. T009-15 remains in progress at a laptop-only boundary: pull the synchronized commit on the actual capture laptop, keep the vehicle physically disconnected, and run the exact three-second elevated smoke in docs/safety.md. Repair and independently review only evidence-based laptop parser differences, then run and audit the exact 2,100-second rehearsal. The current final decision remains no-go; no vehicle or raw vehicle-capture run is authorized."

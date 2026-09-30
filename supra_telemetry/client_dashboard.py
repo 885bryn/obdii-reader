@@ -6,6 +6,7 @@ import socket
 import threading
 import time
 from collections import deque
+from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -40,6 +41,13 @@ BOUNDS = {0x0C: (300, 2500), 0x0D: (0, 0), 0x0F: (-40, 120), 0x11: (0, 100), 0x0
 LIVE_FAILURES = frozenset({"timeout", "stationary-gate", "uds-rejected", "response-invalid", "connection-or-transport", "recording-error"})
 
 
+@dataclass(frozen=True, repr=False)
+class DashboardCaptureRoute:
+    """Validated capture routing snapshot; keep addresses out of repr/log output."""
+    peer: str
+    interface: str
+
+
 class DashboardLiveSource:
     """Paced request cadence, source-bound route, finite budget, halt on error."""
     max_duration = 300
@@ -48,7 +56,8 @@ class DashboardLiveSource:
     bounds_error_reason = "stationary-gate"
 
     def __init__(self, capture, *, timeout=2.0, duration=300, client_factory=HsfzClient,
-                 connector_factory=socket.create_connection, monotonic=time.monotonic, wait=None):
+                 connector_factory=socket.create_connection, monotonic=time.monotonic, wait=None,
+                 route=None):
         if not 0.1 <= float(timeout) <= 5.0:
             raise ValueError("timeout must be between 0.1 and 5 seconds")
         if duration is None and not self.allow_unbounded:
@@ -56,7 +65,12 @@ class DashboardLiveSource:
         if duration is not None and (not isinstance(duration, int) or isinstance(duration, bool)
                                      or not 1 <= duration <= self.max_duration):
             raise ValueError(f"duration must be between 1 and {self.max_duration} seconds")
-        peer, interface, _target, _vin = load_gateway_capture(capture)
+        if route is None:
+            peer, interface, _target, _vin = load_gateway_capture(capture)
+        elif isinstance(route, DashboardCaptureRoute):
+            peer, interface = route.peer, route.interface
+        else:
+            raise ValueError("invalid validated dashboard route")
         def bound_connector(address, connect_timeout):
             return connector_factory(address, connect_timeout, source_address=(interface, 0))
         self.client = client_factory(peer, TESTER_ADDRESS, DME_TARGET_ADDRESS, port=6801,
@@ -201,6 +215,7 @@ class DashboardSimSource:
     def __init__(self, *, monotonic=time.monotonic):
         self._clock, self._start = monotonic, monotonic()
         self.signals = list(SIGNALS)
+        self.allow_unbounded = True
         self.halted = False
         self._tick = 0
 
@@ -341,6 +356,18 @@ def reserve_dashboard_server(host="127.0.0.1", port=8765):
         return ReservedServer((host, port), BaseHTTPRequestHandler)
     except Exception:
         raise RuntimeError("dashboard-bind-failed") from None
+
+
+def preflight_capture_interface(capture, *, socket_factory=None):
+    """Verify the capture's exact source IPv4 can be bound, without network I/O."""
+    peer, interface, _target, _vin = load_gateway_capture(capture)
+    make_socket = socket_factory or socket.socket
+    probe = make_socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.bind((interface, 0))
+    finally:
+        probe.close()
+    return DashboardCaptureRoute(peer=peer, interface=interface)
 
 
 def wait_after_dtc_snapshot(wait=time.sleep):

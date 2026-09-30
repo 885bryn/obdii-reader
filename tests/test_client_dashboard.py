@@ -14,11 +14,11 @@ from urllib.request import urlopen
 from unittest.mock import patch
 
 from supra_telemetry.client_dashboard import (
-    BOUNDS, HTML, SCHEDULE, SIGNALS, DashboardLiveSource, DashboardSimSource,
+    BOUNDS, HTML, SCHEDULE, SIGNALS, DashboardCaptureRoute, DashboardLiveSource, DashboardSimSource,
     MovingDashboardLiveSource,
     dashboard_state, make_dashboard_handler, run_live_dtc_snapshot, safe_dtc_snapshot,
     reserve_dashboard_server, serve_client_dashboard, wait_after_dtc_snapshot,
-    STATIC_ROOT,
+    STATIC_ROOT, preflight_capture_interface,
 )
 from supra_telemetry.engine import AcquisitionEngine
 from supra_telemetry.dme_check import DME_TARGET_ADDRESS
@@ -319,12 +319,14 @@ class ClientDashboardTests(unittest.TestCase):
     def test_stakeholder_cli_reserves_loopback_before_source_and_has_no_dtc_or_recording(self):
         from supra_telemetry import __main__ as cli
         events = []
+        route = DashboardCaptureRoute("captured-peer", "captured-interface")
         class Server:
             server_port = 12345
             def server_close(self): events.append("closed")
         def source(*_args, **kwargs):
             events.append("source")
             self.assertIsNone(kwargs["duration"])
+            self.assertIs(kwargs["route"], route)
             return object()
         def serve(*_args, **kwargs):
             events.append("serve")
@@ -333,13 +335,97 @@ class ClientDashboardTests(unittest.TestCase):
             self.assertEqual(kwargs["dtcs"]["status"], "not-collected")
             return 0
         with patch.object(cli, "reserve_dashboard_server", side_effect=lambda *_: events.append("bind") or Server()), \
+             patch.object(cli, "preflight_capture_interface", side_effect=lambda *_: events.append("preflight") or route), \
              patch.object(cli, "MovingDashboardLiveSource", side_effect=source), \
              patch.object(cli, "run_live_dtc_snapshot") as dtc, \
              patch.object(cli, "serve_client_dashboard", side_effect=serve):
             self.assertEqual(cli.main(["stakeholder-dashboard", "--capture", "private",
                                        "--confirm-hands-off"]), 0)
         dtc.assert_not_called()
-        self.assertEqual(events, ["bind", "source", "serve"])
+        self.assertEqual(events, ["bind", "preflight", "source", "serve"])
+
+    def test_stakeholder_preflight_binds_only_the_exact_capture_interface(self):
+        events = []
+        class Probe:
+            def bind(self, address): events.append(("bind", address))
+            def close(self): events.append(("close",))
+            def connect(self, *_args): raise AssertionError("preflight must not connect")
+            def send(self, *_args): raise AssertionError("preflight must not send")
+        with tempfile.TemporaryDirectory() as td:
+            route = preflight_capture_interface(capture(td), socket_factory=lambda *_: Probe())
+        self.assertNotIn(route.peer, repr(route))
+        self.assertNotIn(route.interface, repr(route))
+        self.assertEqual(events, [("bind", (route.interface, 0)), ("close",)])
+
+    def test_live_source_uses_preflight_snapshot_if_capture_changes_before_construction(self):
+        with tempfile.TemporaryDirectory() as td:
+            capture_path = capture(td)
+            snapshot = preflight_capture_interface(
+                capture_path, socket_factory=lambda *_: type("Probe", (), {
+                    "bind": lambda self, _address: None,
+                    "close": lambda self: None})())
+            Path(capture_path).write_text("{}", encoding="utf-8")
+
+            constructed = []
+            class Client:
+                requests = []
+                def request(self, payload):
+                    self.requests.append(payload)
+                    raise AssertionError("source construction must not request vehicle data")
+                def close(self): pass
+            def client_factory(*args, **kwargs):
+                constructed.append((args, kwargs))
+                return Client()
+            with patch("supra_telemetry.client_dashboard.load_gateway_capture",
+                       side_effect=AssertionError("validated capture route must not be reread")) as load:
+                source = MovingDashboardLiveSource(capture_path, duration=None,
+                                                   route=snapshot,
+                                                   client_factory=client_factory,
+                                                   connector_factory=lambda *_a, **_k: self.fail(
+                                                       "source construction must not connect"))
+            load.assert_not_called()
+            args, kwargs = constructed[0]
+            self.assertEqual(args[0], snapshot.peer)
+            self.assertEqual(args[1:3], (TESTER_ADDRESS, DME_TARGET_ADDRESS))
+            self.assertTrue(callable(kwargs["sock_factory"]))
+            self.assertEqual(source.client.requests, [])
+            source.close()
+
+    def test_stakeholder_preflight_failure_stops_before_source_construction(self):
+        from supra_telemetry import __main__ as cli
+        class Server:
+            def server_close(self): pass
+        with patch.object(cli, "reserve_dashboard_server", return_value=Server()), \
+             patch.object(cli, "preflight_capture_interface", side_effect=OSError()), \
+             patch.object(cli, "MovingDashboardLiveSource") as source, \
+             patch.object(cli, "run_live_dtc_snapshot") as dtc, \
+             contextlib.redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(cli.main(["stakeholder-dashboard", "--capture", "private",
+                                       "--confirm-hands-off"]), 1)
+        source.assert_not_called()
+        dtc.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())["reason"], "source-interface-unavailable")
+
+    def test_stakeholder_simulated_cli_is_local_unbounded_and_has_no_capture(self):
+        from supra_telemetry import __main__ as cli
+        with patch.object(cli, "DashboardSimSource") as source, \
+             patch.object(cli, "serve_client_dashboard", return_value=0) as serve, \
+             patch.object(cli, "preflight_capture_interface") as preflight, \
+             patch.object(cli, "MovingDashboardLiveSource") as live, \
+             patch.object(cli, "TelemetryStore") as store, \
+             patch.object(cli, "run_live_dtc_snapshot") as dtcs:
+            self.assertEqual(cli.main(["stakeholder-dashboard", "--mode", "simulated"]), 0)
+        source.assert_called_once_with()
+        kwargs = serve.call_args.kwargs
+        self.assertEqual(kwargs["mode"], "simulated")
+        self.assertIsNone(kwargs["duration"])
+        self.assertEqual(kwargs["dtcs"]["status"], "not-collected")
+        self.assertTrue(all(kwargs["dtcs"][key] is None
+                            for key in ("stored", "pending", "permanent")))
+        preflight.assert_not_called()
+        live.assert_not_called()
+        store.assert_not_called()
+        dtcs.assert_not_called()
 
     def test_stakeholder_cli_bind_failure_prevents_source_creation(self):
         from supra_telemetry import __main__ as cli
@@ -359,6 +445,7 @@ class ClientDashboardTests(unittest.TestCase):
             halt_reason = "timeout"
         source = Source()
         with patch.object(cli, "reserve_dashboard_server", return_value=Server()), \
+             patch.object(cli, "preflight_capture_interface"), \
              patch.object(cli, "MovingDashboardLiveSource", return_value=source), \
              patch.object(cli, "serve_client_dashboard", return_value=1), \
              contextlib.redirect_stdout(io.StringIO()) as output:
@@ -369,6 +456,7 @@ class ClientDashboardTests(unittest.TestCase):
 
         source.halt_reason = "private transport exception with secret endpoint"
         with patch.object(cli, "reserve_dashboard_server", return_value=Server()), \
+             patch.object(cli, "preflight_capture_interface"), \
              patch.object(cli, "MovingDashboardLiveSource", return_value=source), \
              patch.object(cli, "serve_client_dashboard", return_value=1), \
              contextlib.redirect_stdout(io.StringIO()) as output:
@@ -409,6 +497,34 @@ class ClientDashboardTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(result, [0])
         self.assertTrue(source.closed)
+
+    def test_stakeholder_simulated_dashboard_runs_until_manual_shutdown(self):
+        source = DashboardSimSource()
+        server = reserve_dashboard_server("127.0.0.1", 0)
+        result = []
+        dtcs = {"stored": None, "pending": None, "permanent": None,
+                "permanent_reason": None, "status": "not-collected"}
+        def run():
+            result.append(serve_client_dashboard(source, mode="simulated", dtcs=dtcs,
+                         duration=None, server=server))
+        thread = threading.Thread(target=run, daemon=True)
+        with patch("supra_telemetry.client_dashboard.threading.Timer") as timer:
+            thread.start()
+            try:
+                with urlopen(f"http://127.0.0.1:{server.server_port}/api/state", timeout=2) as response:
+                    payload = json.loads(response.read())
+                self.assertFalse(payload["recording"])
+                self.assertEqual(payload["dtcs"]["status"], "not-collected")
+                self.assertEqual({sample["signal_id"] for sample in payload["samples"]},
+                                 {signal.id for signal in SIGNALS})
+                self.assertTrue(thread.is_alive())
+                timer.assert_not_called()
+            finally:
+                server.shutdown()
+                thread.join(2)
+                server.server_close()
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(result, [0])
 
     def test_dtc_partial_result_keeps_safe_codes_and_fixed_reason(self):
         class Error(Exception):

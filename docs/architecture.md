@@ -33,19 +33,25 @@ one bounded vehicle run, and the faster schedule completed one separately
 reviewed 30-second stationary run. Neither result establishes decoded recording,
 moving-vehicle use, or a longer session.
 
-The separate `stakeholder-dashboard` command reuses the fixed moving six-PID
-source and packaged loopback presentation with standard decoded RPM and speed
-ranges. It does not run the DTC snapshot, create a SQLite store, persist or
-export samples, or expose raw logging or vehicle-control paths. Its capture-bound
-source is constructed only after the loopback listener is reserved. The
+The separate `stakeholder-dashboard` command has a simulated mode and a live
+mode, both using the packaged loopback presentation. Simulated mode uses the
+same six signal definitions, updates values locally, hides DTCs, and creates no
+vehicle connection, database, or log; it runs until Ctrl+C. Live remains the
+default for compatibility and reuses the fixed moving six-PID source with
+standard decoded RPM and speed ranges. After reserving the loopback listener,
+live startup binds a temporary local socket to the exact interface recorded in
+the capture. This bind-only check sends no packets and fails with the fixed
+`source-interface-unavailable` reason if the address is not currently
+assignable. The source is constructed only after that check succeeds. The
 serialized scheduler and five-request-starts-per-second limit remain in force;
-the command has no automatic duration and ends on Ctrl+C or the first
-acquisition error. On acquisition halt, it closes the dashboard promptly and
-the CLI prints a fixed allowlisted failure category. Browser polling clears the
-last snapshot after API loss so stale values cannot remain visible. Its API
-reports recording off and DTCs not collected, which also hides the DTC panel in
-this mode. This offline-reviewed command does not
-change the existing dashboard or `drive-session` safety gates and does not
+live has no automatic duration and ends on Ctrl+C or the first acquisition
+error. It does not run the DTC snapshot, create a SQLite store, persist or
+export samples, or expose raw logging or vehicle-control paths. On acquisition
+halt, it closes the dashboard promptly and the CLI prints a fixed allowlisted
+failure category. Browser polling clears the last snapshot after API loss so
+stale values cannot remain visible. The API reports recording off and DTCs not
+collected, which also hides the DTC panel. This offline-reviewed command does
+not change the existing dashboard or `drive-session` safety gates and does not
 authorize vehicle use.
 
 The separate `drive-session` path reuses only that fixed six-PID scheduler and

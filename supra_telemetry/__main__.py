@@ -43,7 +43,8 @@ from .client_dashboard import (DashboardLiveSource, DashboardSimSource,
                                LIVE_FAILURES, MovingDashboardLiveSource,
                                run_live_dtc_snapshot, serve_client_dashboard,
                                SIMULATED_DTCS, reserve_dashboard_server,
-                               wait_after_dtc_snapshot)
+                               wait_after_dtc_snapshot,
+                               preflight_capture_interface)
 from .drive_session import run_drive_session
 from .capture_harness import HarnessError, run_capture
 
@@ -144,10 +145,12 @@ def main(argv=None):
     drive.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     drive.add_argument("--ui-host", default="127.0.0.1")
     drive.add_argument("--port", type=int, default=8765)
-    stakeholder = sub.add_parser("stakeholder-dashboard", help="manually run a loopback-only six-signal live dashboard")
-    stakeholder.add_argument("--capture", required=True, help="private discovery capture created earlier")
-    stakeholder.add_argument("--confirm-hands-off", action="store_true", required=True,
-                             help="confirm launch while parked and no driver viewing or interaction while moving")
+    stakeholder = sub.add_parser("stakeholder-dashboard", help="run a local simulated demo or capture-bound live dashboard")
+    stakeholder.add_argument("--mode", choices=("simulated", "live"), default="live",
+                             help="simulated runs locally without a capture; live requires the captured interface address to be assigned locally (default: live)")
+    stakeholder.add_argument("--capture", help="private discovery capture required in live mode")
+    stakeholder.add_argument("--confirm-hands-off", action="store_true",
+                             help="confirm launch while parked and no driver viewing or interaction while moving (live mode)")
     stakeholder.add_argument("--timeout", type=float, default=2.0, help="bounded response timeout (0.1 to 5 seconds)")
     stakeholder.add_argument("--ui-host", default="127.0.0.1")
     stakeholder.add_argument("--port", type=int, default=8765)
@@ -251,6 +254,17 @@ def main(argv=None):
             parser.error("timeout must be between 0.1 and 5 seconds")
         if args.ui_host not in ("127.0.0.1", "localhost", "::1"):
             parser.error("dashboard must bind to loopback")
+        if args.mode == "simulated":
+            if args.capture or args.confirm_hands_off:
+                parser.error("--capture and --confirm-hands-off are only accepted in live mode")
+            dtcs = {"stored": None, "pending": None, "permanent": None,
+                    "permanent_reason": None, "status": "not-collected"}
+            return serve_client_dashboard(DashboardSimSource(), mode="simulated", dtcs=dtcs,
+                                          host=args.ui_host, port=args.port, duration=None)
+        if not args.capture:
+            parser.error("--capture is required in live mode")
+        if not args.confirm_hands_off:
+            parser.error("--confirm-hands-off is required in live mode")
         try:
             server = reserve_dashboard_server(args.ui_host, args.port)
         except Exception:
@@ -258,7 +272,15 @@ def main(argv=None):
                               "reason": "dashboard-bind-failed"}))
             return 1
         try:
-            source = MovingDashboardLiveSource(args.capture, timeout=args.timeout, duration=None)
+            capture_route = preflight_capture_interface(args.capture)
+        except Exception:
+            server.server_close()
+            print(json.dumps({"result": "failed", "check": "stakeholder dashboard",
+                              "reason": "source-interface-unavailable"}))
+            return 1
+        try:
+            source = MovingDashboardLiveSource(args.capture, timeout=args.timeout, duration=None,
+                                               route=capture_route)
         except Exception:
             server.server_close()
             print(json.dumps({"result": "failed", "check": "stakeholder dashboard",
